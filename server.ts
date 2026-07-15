@@ -192,6 +192,8 @@ async function generateQuizWithFallback(
           contents: userPrompt,
           config: {
             systemInstruction,
+            temperature: 0.1,
+            maxOutputTokens: 8192,
             responseMimeType: 'application/json',
             responseSchema: {
               type: 'ARRAY',
@@ -231,7 +233,8 @@ async function generateQuizWithFallback(
         if (isTransientError(error)) {
           if (attempt < 2) {
             const backoffTime = attempt * 1500;
-            console.log(`Transient error detected (429/RESOURCE_EXHAUSTED). Retrying model ${model} in ${backoffTime}ms...`);
+            const { message, code, status } = getErrorDetails(error);
+            console.log(`Transient error detected (${status || code || 'Transient'}: ${message.substring(0, 100)}). Retrying model ${model} in ${backoffTime}ms...`);
             await delay(backoffTime);
           } else {
             console.log(`Model ${model} exhausted maximum attempts. Moving to next model...`);
@@ -305,8 +308,8 @@ Rules:
    - "questionText": string (the exact original question text and numbering).
    - "options": array of exactly 4 strings.
    - "correctIndex": integer (0, 1, 2, or 3).
-   - "explanation": string (concise explanation).
-   - "sourceExcerpt": string (exact verbatim quote or excerpt from the PDF).
+   - "explanation": string (extremely concise, max 15 words explaining why the option is correct).
+   - "sourceExcerpt": string (extremely short verbatim text snippet, max 15 words).
    - "pageNumber": integer (approximate page number or best estimate).
 4. No custom formatting outside the JSON array of objects.`;
 
