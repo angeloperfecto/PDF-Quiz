@@ -1,0 +1,6 @@
+{
+  "name": "PDF Quiz Generator",
+  "description": "Generate interactive multiple-choice quizzes automatically from any uploaded PDF document using Gemini AI.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

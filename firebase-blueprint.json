@@ -1,0 +1,16 @@
+{
+  "collections": {
+    "quizzes": {
+      "fields": {
+        "userId": "string",
+        "fileName": "string",
+        "uploadDate": "string",
+        "numQuestions": "number",
+        "difficulty": "string",
+        "questionType": "string",
+        "questions": "array",
+        "scoreHistory": "array"
+      }
+    }
+  }
+}
