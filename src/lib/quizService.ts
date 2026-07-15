@@ -20,7 +20,8 @@ export const saveQuizToFirestore = async (quiz: Quiz): Promise<void> => {
 
   try {
     const docRef = doc(db, QUIZ_COLLECTION, quiz.id);
-    await setDoc(docRef, quiz);
+    const cleanedQuiz = JSON.parse(JSON.stringify(quiz));
+    await setDoc(docRef, cleanedQuiz);
   } catch (error) {
     console.error('Error saving quiz to Firestore:', error);
     throw error;

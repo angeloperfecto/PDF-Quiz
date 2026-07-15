@@ -414,11 +414,22 @@ export default function CalendarView({
         })
       });
 
-      if (!response.ok) {
-        throw new Error('Could not generate quiz.');
+      let data: any = {};
+      const contentType = response.headers.get('content-type');
+      if (contentType && contentType.includes('application/json')) {
+        data = await response.json();
+      } else {
+        const textResponse = await response.text();
+        console.error('Non-JSON response received from server in calendar modal:', textResponse);
+        if (!response.ok) {
+          throw new Error(`The quiz generator server encountered an unexpected error (Status ${response.status}). Please try again in a moment.`);
+        }
+        throw new Error('Received an unexpected non-JSON response from the server.');
       }
 
-      const data = await response.json();
+      if (!response.ok) {
+        throw new Error(data.error || 'Failed to generate quiz. Please try again.');
+      }
       
       const newQuiz: Quiz = {
         id: `quiz-${Date.now()}-${Math.floor(Math.random() * 1000)}`,

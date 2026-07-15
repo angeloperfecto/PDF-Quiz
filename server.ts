@@ -100,7 +100,7 @@ function parseQuizQuestions(jsonStr: string): any[] {
       return parsed;
     }
   } catch (e) {
-    console.warn("Standard JSON parsing failed, attempting robust block recovery...", e);
+    console.log("Standard JSON parsing failed, attempting robust block recovery...", e);
   }
 
   const questions: any[] = [];
@@ -221,7 +221,7 @@ async function generateQuizWithFallback(
         throw new Error('Received empty response from Gemini API.');
       } catch (error: any) {
         lastError = error;
-        console.warn(`Attempt ${attempt} on model ${model} failed. Error:`, error?.message || error);
+        console.log(`Attempt ${attempt} on model ${model} failed. Error:`, error?.message || error);
 
         if (isHighDemandError(error)) {
           console.log(`High demand or Unavailable status detected on model ${model}. Skipping retries and falling back to the next model immediately...`);
@@ -284,51 +284,42 @@ app.post('/api/generate-quiz', async (req, res) => {
     const difficulty = config?.difficulty || 'Medium';
     const questionType = config?.questionType || 'Mixed';
 
-    const systemInstruction = `You are a professional, document-grounded multiple-choice quiz generator.
-Your goal is to generate high-quality, highly accurate multiple-choice questions based ONLY on the provided PDF text.
+    const systemInstruction = `You are an expert, document-grounded multiple-choice quiz scanner, extractor, and generator.
+Your absolute, highest-priority goal is to scan the provided PDF text, identify ALL pre-existing questions, and faithfully extract every single one of them onto the website without any omissions, alterations, or summaries.
 
-CRITICAL RULE FOR PRE-EXISTING QUESTIONS IN THE PDF:
-If the provided PDF text already contains pre-existing questions (such as exam questions, practice tests, quiz questions, worksheets, homework questions, or review questionnaires), your absolute highest priority is to SCAN, EXTRACT, and PRESERVE every single one of those questions!
-- Detect all questions in the text, including multiple-choice questions, true/false questions, fill-in-the-blank questions, or open-ended/conceptual questions.
-- For each question found in the PDF, you MUST map it directly to the structured JSON schema:
-  1. "questionText": The exact (or slightly cleaned up for clarity) question text from the PDF. Do NOT change its meaning.
-  2. "options": If the original question already has choices in the PDF, extract them exactly as they are and present them (exactly 4 options). If the original question does not have options, or has fewer than 4 options, you must formulate plausible multiple-choice options (A, B, C, D) based on the text, ensuring one of them is the correct answer and the others are high-quality, realistic distractors.
-  3. "correctIndex": The index (0-3) of the correct option. Determine the correct answer using either the answer key provided in the PDF, or by analyzing the document text.
-  4. "explanation": A concise, clear explanation explaining why that option is correct. Keep this to max 1-2 sentences to prevent hitting token limits.
-  5. "sourceExcerpt": The exact text snippet or sentence from the PDF where the question's content or answer is located. Keep this brief.
-  6. "pageNumber": The approximate page number in the PDF where this question is found.
-- DO NOT skip or ignore any questions that are in the PDF. Scan and reflect ALL of them on the website.
-- If the PDF contains pre-existing questions, you MUST scan and extract EVERY SINGLE pre-existing question found in the document. Completely ignore the requested question limit (${numQuestionsStr}) and prioritize full extraction of all pre-existing questions (up to 50 questions).
-- If there are no pre-existing questions found in the PDF, only then should you generate new high-quality questions based on the informational content of the document up to the limit (${numQuestionsStr}).
+CRITICAL MANDATES FOR PRE-EXISTING QUESTIONS IN THE PDF:
+1. 100% COMPLETE COVERAGE: You MUST scan and extract EVERY SINGLE pre-existing question found in the PDF. No questions should be skipped, omitted, summarized, or condensed. The extraction process must achieve 100% coverage.
+2. FAITHFUL REPRODUCTION: Reproduce the complete set of questions exactly as they appear in the original document. Preserve original numbering (e.g., "Question 1", "1. ", "10."), formatting, ordering, and exact verbatim wording of the question texts. Do NOT paraphrase, summarize, or alter their meaning or structure.
+3. MULTIPLE-CHOICE OPTIONS PRESERVATION: 
+   - If the original question has multiple-choice options in the PDF text, extract those options EXACTLY as they are and in their exact original order.
+   - If the original question has fewer than 4 options or is a true/false, fill-in-the-blank, or open-ended question, you must map it into a 4-option structure (A, B, C, D) where the correct answer is faithfully represented as one of the options, and the others are plausible, realistic distractors directly derived from the document context.
+   - Ensure "options" is always a valid JSON array of exactly 4 choices (A, B, C, D).
+4. RECOVERY OF ANSWERS: Correctly identify the "correctIndex" (0 to 3) by matching the correct answer against any answer key provided in the document or by logical analysis of the context.
+5. COMPLETE INTEGRATION: Completely ignore any user-specified question count limit if pre-existing questions are present. Your priority is to extract ALL of them (up to 50 questions) to ensure the user can answer the exact full original worksheet/exam on the website.
+6. NEW GENERATION FALLBACK: Only if there are absolutely NO pre-existing questions in the PDF, you should generate brand new high-quality multiple-choice questions from the informational content of the document up to the limit of ${numQuestionsStr}.
 
 Rules:
-1. Strict Accuracy Requirement: Do not invent facts, hallucinate facts, or guess. Every question, choice, and correct answer must be directly supported by information found explicitly in the text.
-2. Technical Preservation: Keep all numerical values, dates, formulas, names, standards (e.g. ISO, IEEE), technical terms, definitions, and units exact. Do not simplify or round off figures unless specified in the text.
-3. Document-based: Rely only on the provided text. Never reference external knowledge, real-world events, or information outside the document. If a concept is unclear, skip generating a question for it rather than guessing.
-4. Structure:
-   - Exactly four choices (A, B, C, D) per question.
-   - Only ONE option must be unambiguously correct.
-   - The other three options (distractors) must be plausible but incorrect based strictly on the text.
-   - Explanation: Provide a helpful, concise explanation referencing the factual source.
-   - Source Excerpt: Provide the exact text snippet or sentence from the PDF supporting the answer.
-   - Page Number: Specify the integer page number where the answer is found. If there are no clear page indicators, make a best estimate or omit if impossible to trace.
-5. Question Types:
-   - Definition: Focus on definitions of technical terms, concepts, acronyms, or formulas.
-   - Identification: Ask the user to identify components, standards, rules, dates, or names based on a description.
-   - True/False: Format the four choices so that the question presents a statement and asks if it is True or False (e.g., choice 0 is "True, because...", choice 1 is "False, because...", and choice 2 and 3 are alternative assertions or simple "True", "False", "Both True & False", "Cannot be determined from text"). Keep it elegant and easy to read.
-   - Multiple Choice: Standard conceptual or application multiple-choice questions.
-   - Mixed: A combination of the above types.
-6. Return a valid JSON array of questions matching the rules above.`;
+1. Strict Accuracy: Do not hallucinate or guess. Every question, option, correct index, and explanation must be 100% backed by the provided text.
+2. Technical Preservation: Keep all exact numerical values, formulas, dates, names, standard identifiers, and units perfectly intact.
+3. Structured JSON Schema: Return a valid JSON array where each element contains:
+   - "questionText": string (the exact original question text and numbering).
+   - "options": array of exactly 4 strings.
+   - "correctIndex": integer (0, 1, 2, or 3).
+   - "explanation": string (concise explanation).
+   - "sourceExcerpt": string (exact verbatim quote or excerpt from the PDF).
+   - "pageNumber": integer (approximate page number or best estimate).
+4. No custom formatting outside the JSON array of objects.`;
 
-    const userPrompt = `Your absolute highest priority task is to analyze the document text for any pre-existing questions, worksheets, quizzes, or exams. 
-If pre-existing questions are present, you MUST extract ALL of them (converting them to 4-option multiple-choice structure while preserving the exact original questions and answers), and completely ignore the requested limit of ${numQuestionsStr}.
-If there are NO pre-existing questions in the text, then generate up to ${numQuestionsStr} new multiple-choice questions of difficulty "${difficulty}" and type "${questionType}" based on the informational content of the document.
+    const userPrompt = `Your absolute, most critical directive is to scan the provided source text for any pre-existing questions, worksheets, quizzes, or exams.
+If pre-existing questions are found, you MUST extract ALL of them, preserving their exact wording, original numbering, ordering, options, and meaning with 100% complete coverage and zero omissions. Converting them to standard 4-option multiple choice structure where necessary. Completely ignore the count limit of ${numQuestionsStr} and extract all pre-existing questions found.
+
+If there are NO pre-existing questions in the text, then generate up to ${numQuestionsStr} brand new high-quality multiple-choice questions of difficulty "${difficulty}" and type "${questionType}" based on the informational content.
 
 --- BEGIN SOURCE TEXT ---
 ${text}
 --- END SOURCE TEXT ---
 
-Adhere strictly to the system instruction and response schema. Generate a valid JSON array of questions.`;
+Adhere strictly to the system instruction. Generate a valid JSON array of questions matching the schema.`;
 
     const response = await generateQuizWithFallback(ai, userPrompt, systemInstruction);
 
