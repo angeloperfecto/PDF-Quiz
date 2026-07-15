@@ -91,16 +91,25 @@ const isHighDemandError = (err: any): boolean => {
 };
 
 // Robust recovery JSON parser to handle slightly malformed or truncated responses when too many questions are returned
-function parseQuizQuestions(jsonStr: string): any[] {
+function parseQuizQuestions(rawJsonStr: string): any[] {
+  // Try to find a JSON array block
+  let jsonStr = rawJsonStr.trim();
+  const match = jsonStr.match(/\[\s*\{[\s\S]*\}\s*\]/);
+  if (match) {
+    jsonStr = match[0];
+  } else {
+    // Strip markdown code blocks if present just in case
+    jsonStr = rawJsonStr.replace(/```(json)?|```/g, '').trim();
+  }
+
   // First, try standard JSON.parse
   try {
-    const trimmed = jsonStr.trim();
-    const parsed = JSON.parse(trimmed);
+    const parsed = JSON.parse(jsonStr);
     if (Array.isArray(parsed)) {
       return parsed;
     }
   } catch (e) {
-    console.log("Standard JSON parsing failed, attempting robust block recovery...", e);
+    // Standard JSON parsing failed, attempt robust block recovery silently
   }
 
   const questions: any[] = [];
@@ -223,24 +232,22 @@ async function generateQuizWithFallback(
         throw new Error('Received empty response from Gemini API.');
       } catch (error: any) {
         lastError = error;
-        console.log(`Attempt ${attempt} on model ${model} failed. Error:`, error?.message || error);
 
         if (isHighDemandError(error)) {
-          console.log(`High demand or Unavailable status detected on model ${model}. Skipping retries and falling back to the next model immediately...`);
+          console.log(`Model ${model} is experiencing high demand. Skipping to the next model...`);
           break; // Exit the attempt loop for this model and move to the next model
         }
 
         if (isTransientError(error)) {
           if (attempt < 2) {
             const backoffTime = attempt * 1500;
-            const { message, code, status } = getErrorDetails(error);
-            console.log(`Transient error detected (${status || code || 'Transient'}: ${message.substring(0, 100)}). Retrying model ${model} in ${backoffTime}ms...`);
+            console.log(`Temporary issue with model ${model}. Retrying in ${backoffTime}ms...`);
             await delay(backoffTime);
           } else {
             console.log(`Model ${model} exhausted maximum attempts. Moving to next model...`);
           }
         } else {
-          console.log(`Non-transient error on model ${model}. Moving to next model...`);
+          console.log(`Model ${model} encountered an issue. Moving to next model...`);
           break;
         }
       }
@@ -311,7 +318,7 @@ Rules:
    - "explanation": string (extremely concise, max 15 words explaining why the option is correct).
    - "sourceExcerpt": string (extremely short verbatim text snippet, max 15 words).
    - "pageNumber": integer (approximate page number or best estimate).
-4. No custom formatting outside the JSON array of objects.`;
+4. No custom formatting outside the JSON array of objects. Do NOT use markdown code blocks (\`\`\`json). Just return the raw JSON array.`;
 
     const userPrompt = `Your absolute, most critical directive is to scan the provided source text for any pre-existing questions, worksheets, quizzes, or exams.
 If pre-existing questions are found, you MUST extract ALL of them, preserving their exact wording, original numbering, ordering, options, and meaning with 100% complete coverage and zero omissions. Converting them to standard 4-option multiple choice structure where necessary. Completely ignore the count limit of ${numQuestionsStr} and extract all pre-existing questions found.
