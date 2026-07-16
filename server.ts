@@ -91,10 +91,10 @@ const isHighDemandError = (err: any): boolean => {
 };
 
 // Robust recovery JSON parser to handle slightly malformed or truncated responses when too many questions are returned
-function parseQuizQuestions(rawJsonStr: string): any[] {
-  // Try to find a JSON array block
+function parseQuizQuestions(rawJsonStr: string): { questions: any[], totalQuestionsInPDF?: number, validationMessage?: string } {
+  // Try to find a JSON object block
   let jsonStr = rawJsonStr.trim();
-  const match = jsonStr.match(/\[\s*\{[\s\S]*\}\s*\]/);
+  const match = jsonStr.match(/\{[\s\S]*\}/);
   if (match) {
     jsonStr = match[0];
   } else {
@@ -105,11 +105,29 @@ function parseQuizQuestions(rawJsonStr: string): any[] {
   // First, try standard JSON.parse
   try {
     const parsed = JSON.parse(jsonStr);
-    if (Array.isArray(parsed)) {
-      return parsed;
+    if (parsed && typeof parsed === 'object' && Array.isArray(parsed.questions)) {
+      return {
+        questions: parsed.questions,
+        totalQuestionsInPDF: parsed.totalQuestionsInPDF,
+        validationMessage: parsed.validationMessage
+      };
+    } else if (Array.isArray(parsed)) {
+       // fallback if model still returned array
+       return { questions: parsed };
     }
   } catch (e) {
     // Standard JSON parsing failed, attempt robust block recovery silently
+  }
+
+  // If we couldn't parse the root object, fallback to extracting the questions array manually
+  const arrayMatch = jsonStr.match(/\[\s*\{[\s\S]*\}\s*\]/);
+  if (arrayMatch) {
+     try {
+       const parsedArray = JSON.parse(arrayMatch[0]);
+       if (Array.isArray(parsedArray)) {
+         return { questions: parsedArray };
+       }
+     } catch(e) {}
   }
 
   const questions: any[] = [];
@@ -180,7 +198,7 @@ function parseQuizQuestions(rawJsonStr: string): any[] {
     }
   }
 
-  return questions;
+  return { questions };
 }
 
 // Robust generator function with model pool and backoff retry logic
@@ -207,23 +225,31 @@ async function generateQuizWithFallback(
             maxOutputTokens: 8192,
             responseMimeType: 'application/json',
             responseSchema: {
-              type: 'ARRAY',
-              items: {
-                type: 'OBJECT',
-                properties: {
-                  questionText: { type: 'STRING' },
-                  options: {
-                    type: 'ARRAY',
-                    items: { type: 'STRING' }
-                  },
-                  correctAnswerText: { type: 'STRING', description: 'The exact text of the correct option. This must exactly match one of the items in the options array.' },
-                  correctIndex: { type: 'INTEGER', description: 'The 0-based index (0, 1, 2, or 3) in the options array that matches the correctAnswerText.' },
-                  explanation: { type: 'STRING' },
-                  sourceExcerpt: { type: 'STRING' },
-                  pageNumber: { type: 'INTEGER' }
-                },
-                required: ['questionText', 'options', 'correctAnswerText', 'correctIndex', 'explanation', 'sourceExcerpt']
-              }
+              type: 'OBJECT',
+              properties: {
+                totalQuestionsInPDF: { type: 'INTEGER', description: 'The exact count of pre-existing questions found in the document. Set to 0 if generating new questions.' },
+                validationMessage: { type: 'STRING', description: 'A brief message detailing if all questions were successfully extracted or if any were missed.' },
+                questions: {
+                  type: 'ARRAY',
+                  items: {
+                    type: 'OBJECT',
+                    properties: {
+                      questionText: { type: 'STRING' },
+                      options: {
+                        type: 'ARRAY',
+                        items: { type: 'STRING' }
+                      },
+                      correctAnswerText: { type: 'STRING', description: 'The exact text of the correct option. This must exactly match one of the items in the options array.' },
+                      correctIndex: { type: 'INTEGER', description: 'The 0-based index (0, 1, 2, or 3) in the options array that matches the correctAnswerText.' },
+                      explanation: { type: 'STRING' },
+                      sourceExcerpt: { type: 'STRING' },
+                      pageNumber: { type: 'INTEGER' }
+                    },
+                    required: ['questionText', 'options', 'correctAnswerText', 'correctIndex', 'explanation', 'sourceExcerpt']
+                  }
+                }
+              },
+              required: ['totalQuestionsInPDF', 'validationMessage', 'questions']
             }
           }
         });
@@ -314,15 +340,18 @@ CRITICAL MANDATES FOR PRE-EXISTING QUESTIONS IN THE PDF:
 Rules:
 1. Strict Accuracy: Do not hallucinate or guess. Every question, option, correct index, and explanation must be 100% backed by the provided text.
 2. Technical Preservation: Keep all exact numerical values, formulas, dates, names, standard identifiers, and units perfectly intact.
-3. Structured JSON Schema: Return a valid JSON array where each element contains:
-   - "questionText": string (the exact original question text and numbering).
-   - "options": array of exactly 4 strings.
-   - "correctAnswerText": string (the exact string text of the correct option).
-   - "correctIndex": integer (0, 1, 2, or 3) representing the index of the correctAnswerText in the options array.
-   - "explanation": string (extremely concise, max 15 words explaining why the option is correct).
-   - "sourceExcerpt": string (extremely short verbatim text snippet, max 15 words).
-   - "pageNumber": integer (approximate page number or best estimate).
-4. No custom formatting outside the JSON array of objects. Do NOT use markdown code blocks (\`\`\`json). Just return the raw JSON array.`;
+3. Structured JSON Schema: Return a valid JSON object with the following properties:
+   - "totalQuestionsInPDF": integer (The exact count of pre-existing questions found in the document, or 0 if generating new questions).
+   - "validationMessage": string (A message confirming extraction success or noting missing items).
+   - "questions": array of objects where each element contains:
+     - "questionText": string (the exact original question text and numbering).
+     - "options": array of exactly 4 strings.
+     - "correctAnswerText": string (the exact string text of the correct option).
+     - "correctIndex": integer (0, 1, 2, or 3) representing the index of the correctAnswerText in the options array.
+     - "explanation": string (extremely concise, max 15 words explaining why the option is correct).
+     - "sourceExcerpt": string (extremely short verbatim text snippet, max 15 words).
+     - "pageNumber": integer (approximate page number or best estimate).
+4. No custom formatting outside the JSON object. Do NOT use markdown code blocks (\`\`\`json). Just return the raw JSON object.`;
 
     const userPrompt = `Your absolute, most critical directive is to scan the provided source text for any pre-existing questions, worksheets, quizzes, or exams.
 If pre-existing questions are found, you MUST extract ALL of them, preserving their exact wording, original numbering, ordering, options, and meaning with 100% complete coverage and zero omissions. Converting them to standard 4-option multiple choice structure where necessary. Completely ignore the count limit of ${numQuestionsStr} and extract all pre-existing questions found.
@@ -333,7 +362,7 @@ If there are NO pre-existing questions in the text, then generate up to ${numQue
 ${text}
 --- END SOURCE TEXT ---
 
-Adhere strictly to the system instruction. Generate a valid JSON array of questions matching the schema.`;
+Adhere strictly to the system instruction. Generate a valid JSON object matching the schema.`;
 
     const response = await generateQuizWithFallback(ai, userPrompt, systemInstruction);
 
@@ -343,7 +372,9 @@ Adhere strictly to the system instruction. Generate a valid JSON array of questi
     }
 
     try {
-      const quizQuestions = parseQuizQuestions(responseText);
+      const parsedData = parseQuizQuestions(responseText);
+      const quizQuestions = parsedData.questions;
+
       if (!quizQuestions || quizQuestions.length === 0) {
         throw new Error('No valid questions could be parsed from the response.');
       }
@@ -361,7 +392,7 @@ Adhere strictly to the system instruction. Generate a valid JSON array of questi
         }
       });
 
-      res.json({ questions: quizQuestions });
+      res.json(parsedData);
     } catch (parseErr) {
       console.error('Error parsing JSON from Gemini response:', responseText, parseErr);
       res.status(500).json({

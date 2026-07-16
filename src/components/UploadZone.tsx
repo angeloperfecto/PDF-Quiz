@@ -222,6 +222,14 @@ export default function UploadZone({ onQuizGenerated, isLoading, setIsLoading }:
       }
 
       setProgressPercent(100);
+
+      // Validation Step: Check if all questions were extracted
+      if (data.totalQuestionsInPDF > 0 && data.questions.length !== data.totalQuestionsInPDF) {
+        alert(`Extraction Issue Detected:\nThe system found ${data.totalQuestionsInPDF} questions in the PDF, but only successfully extracted ${data.questions.length}.\n\nAI Validation Message: ${data.validationMessage || 'Some questions were missed.'}`);
+      } else if (data.validationMessage) {
+        console.log("Extraction Validation:", data.validationMessage);
+      }
+
       onQuizGenerated({
         fileName: file.name,
         questions: data.questions,
