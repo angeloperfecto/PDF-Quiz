@@ -169,6 +169,13 @@ export default function UploadZone({ onQuizGenerated, isLoading, setIsLoading }:
         throw new Error('Could not extract sufficient text from the PDF. The document might be fully encrypted, empty, or contain unreadable imagery.');
       }
 
+      // Truncate to ~100 pages of text to prevent API timeouts and "fetch failed" errors on massive documents
+      const MAX_TEXT_LENGTH = 200000;
+      if (combinedText.length > MAX_TEXT_LENGTH) {
+        combinedText = combinedText.substring(0, MAX_TEXT_LENGTH) + '\n\n...[DOCUMENT TRUNCATED DUE TO LENGTH LIMITS]...';
+        console.warn('PDF text was truncated because it exceeded the maximum allowed length.');
+      }
+
       setProgressStep('Analyzing content and generating questions with Gemini AI...');
       setProgressPercent(90);
 
@@ -181,16 +188,21 @@ export default function UploadZone({ onQuizGenerated, isLoading, setIsLoading }:
         allPages: useAllPages,
       };
 
-      const response = await fetch('/api/generate-quiz', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          text: combinedText,
-          config,
-        }),
-      });
+      let response;
+      try {
+        response = await fetch('/api/generate-quiz', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            text: combinedText,
+            config,
+          }),
+        });
+      } catch (fetchErr: any) {
+        throw new Error('Network error: Could not connect to the server or the connection timed out. Please try again with a smaller document or fewer pages.');
+      }
 
       let data: any = {};
       const contentType = response.headers.get('content-type');

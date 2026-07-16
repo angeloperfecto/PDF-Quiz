@@ -21,7 +21,8 @@ import {
   Maximize2,
   Minimize2,
   Calendar,
-  Trash2
+  Trash2,
+  Plus
 } from 'lucide-react';
 import { auth, ensureUserSession, googleProvider, signInWithPopup, signOut } from './lib/firebase';
 import { onAuthStateChanged } from 'firebase/auth';
@@ -38,7 +39,7 @@ import PDFViewer from './components/PDFViewer';
 import QuizView from './components/QuizView';
 import ResultsView from './components/ResultsView';
 import HistoryView from './components/HistoryView';
-import CalendarView from './components/CalendarView';
+import ManualQuizCreator from './components/ManualQuizCreator';
 
 export default function App() {
   const [user, setUser] = useState<any>(null);
@@ -49,7 +50,8 @@ export default function App() {
   const [activeFile, setActiveFile] = useState<File | null>(null);
 
   // Layout & UI States
-  const [activeTab, setActiveTab] = useState<'dashboard' | 'active-study' | 'history' | 'calendar'>('dashboard');
+  const [activeTab, setActiveTab] = useState<'dashboard' | 'active-study' | 'history' | 'calendar' | 'manual-quiz'>('dashboard');
+  const [manualQuizToEdit, setManualQuizToEdit] = useState<Quiz | null>(null);
   const [darkMode, setDarkMode] = useState<boolean>(false);
   const [isSidebarOpen, setIsSidebarOpen] = useState<boolean>(false);
   const [isGenerating, setIsGenerating] = useState<boolean>(false);
@@ -279,7 +281,7 @@ export default function App() {
     setCurrentAttempt(lastAttempt);
     setActiveTab('active-study');
     setMobileSplit('study');
-    setLayoutMode('split');
+    setLayoutMode(quiz.isManual ? 'quiz-only' : 'split');
     // Clear page ref states
     setActivePDFPage(1);
     setActiveHighlightText('');
@@ -396,6 +398,23 @@ export default function App() {
             >
               <Calendar className="w-5 h-5" />
               Study Calendar
+            </button>
+
+            <button
+              id="sidebar-tab-manual-quiz"
+              onClick={() => {
+                setManualQuizToEdit(null);
+                setActiveTab('manual-quiz');
+                setIsSidebarOpen(false);
+              }}
+              className={`w-full flex items-center gap-3 px-4 py-3 rounded-2xl text-sm font-semibold transition-all border ${
+                activeTab === 'manual-quiz'
+                  ? 'bg-indigo-500/10 text-indigo-600 dark:bg-indigo-500/20 dark:text-indigo-400 border-indigo-500/15'
+                  : 'text-slate-600 hover:text-slate-900 dark:text-slate-400 dark:hover:text-slate-200 hover:bg-white/30 dark:hover:bg-white/5 border-transparent'
+              }`}
+            >
+              <Plus className="w-5 h-5" />
+              Manual Quiz Creator
             </button>
 
             {currentQuiz && (
@@ -540,45 +559,56 @@ export default function App() {
             {currentQuiz && activeTab === 'active-study' && (
               <>
                 {/* Desktop Layout Mode Selectors */}
-                <div className="hidden lg:flex items-center gap-0.5 bg-slate-200/50 dark:bg-white/5 p-1 rounded-xl border border-slate-250 dark:border-white/5">
-                  <button
-                    id="layout-split-btn"
-                    onClick={() => setLayoutMode('split')}
-                    className={`px-2.5 py-1.5 rounded-lg text-[11px] font-bold transition-all ${
-                      layoutMode === 'split'
-                        ? 'bg-indigo-600 text-white shadow-sm'
-                        : 'hover:text-slate-900 dark:hover:text-slate-100 text-slate-500 dark:text-slate-400 hover:bg-slate-200/40 dark:hover:bg-white/5'
-                    }`}
-                  >
-                    Split View
-                  </button>
-                  <button
-                    id="layout-quiz-btn"
-                    onClick={() => setLayoutMode('quiz-only')}
-                    className={`px-2.5 py-1.5 rounded-lg text-[11px] font-bold transition-all ${
-                      layoutMode === 'quiz-only'
-                        ? 'bg-indigo-600 text-white shadow-sm'
-                        : 'hover:text-slate-900 dark:hover:text-slate-100 text-slate-500 dark:text-slate-400 hover:bg-slate-200/40 dark:hover:bg-white/5'
-                    }`}
-                  >
-                    Quiz Only
-                  </button>
-                  <button
-                    id="layout-pdf-btn"
-                    onClick={() => setLayoutMode('pdf-only')}
-                    className={`px-2.5 py-1.5 rounded-lg text-[11px] font-bold transition-all ${
-                      layoutMode === 'pdf-only'
-                        ? 'bg-indigo-600 text-white shadow-sm'
-                        : 'hover:text-slate-900 dark:hover:text-slate-100 text-slate-500 dark:text-slate-400 hover:bg-slate-200/40 dark:hover:bg-white/5'
-                    }`}
-                  >
-                    PDF Only
-                  </button>
-                </div>
+                {!currentQuiz.isManual && (
+                  <div className="hidden lg:flex items-center gap-0.5 bg-slate-200/50 dark:bg-white/5 p-1 rounded-xl border border-slate-250 dark:border-white/5">
+                    <button
+                      id="layout-split-btn"
+                      onClick={() => setLayoutMode('split')}
+                      className={`px-2.5 py-1.5 rounded-lg text-[11px] font-bold transition-all ${
+                        layoutMode === 'split'
+                          ? 'bg-indigo-600 text-white shadow-sm'
+                          : 'hover:text-slate-900 dark:hover:text-slate-100 text-slate-500 dark:text-slate-400 hover:bg-slate-200/40 dark:hover:bg-white/5'
+                      }`}
+                    >
+                      Split View
+                    </button>
+                    <button
+                      id="layout-quiz-btn"
+                      onClick={() => setLayoutMode('quiz-only')}
+                      className={`px-2.5 py-1.5 rounded-lg text-[11px] font-bold transition-all ${
+                        layoutMode === 'quiz-only'
+                          ? 'bg-indigo-600 text-white shadow-sm'
+                          : 'hover:text-slate-900 dark:hover:text-slate-100 text-slate-500 dark:text-slate-400 hover:bg-slate-200/40 dark:hover:bg-white/5'
+                      }`}
+                    >
+                      Quiz Only
+                    </button>
+                    <button
+                      id="layout-pdf-btn"
+                      onClick={() => setLayoutMode('pdf-only')}
+                      className={`px-2.5 py-1.5 rounded-lg text-[11px] font-bold transition-all ${
+                        layoutMode === 'pdf-only'
+                          ? 'bg-indigo-600 text-white shadow-sm'
+                          : 'hover:text-slate-900 dark:hover:text-slate-100 text-slate-500 dark:text-slate-400 hover:bg-slate-200/40 dark:hover:bg-white/5'
+                      }`}
+                    >
+                      PDF Only
+                    </button>
+                  </div>
+                )}
 
                 <span className="hidden sm:inline-flex items-center gap-1.5 bg-white/20 dark:bg-white/5 border border-slate-200/50 dark:border-white/5 px-3 py-1.5 rounded-full truncate max-w-xs">
-                  <FileText className="w-3.5 h-3.5 text-red-500" />
-                  {currentQuiz.fileName}
+                  {currentQuiz.isManual ? (
+                    <>
+                      <BookOpen className="w-3.5 h-3.5 text-indigo-500" />
+                      {currentQuiz.title || 'Manual Quiz'}
+                    </>
+                  ) : (
+                    <>
+                      <FileText className="w-3.5 h-3.5 text-red-500" />
+                      {currentQuiz.fileName}
+                    </>
+                  )}
                 </span>
               </>
             )}
@@ -867,30 +897,32 @@ export default function App() {
               </div>
 
               {/* Mobile Navigation Split-Bar */}
-              <div className="lg:hidden flex border-t border-slate-200/50 dark:border-white/5 bg-white/40 dark:bg-[#0b0f19]/40 backdrop-blur-md p-2.5 flex-shrink-0">
-                <button
-                  onClick={() => setMobileSplit('study')}
-                  className={`flex-1 py-2.5 rounded-xl font-bold text-xs flex items-center justify-center gap-2 transition-all ${
-                    mobileSplit === 'study'
-                      ? 'bg-indigo-600 text-white'
-                      : 'text-slate-500'
-                  }`}
-                >
-                  <HelpCircle className="w-4 h-4" />
-                  Quiz / Review
-                </button>
-                <button
-                  onClick={() => setMobileSplit('pdf')}
-                  className={`flex-1 py-2.5 rounded-xl font-bold text-xs flex items-center justify-center gap-2 transition-all ${
-                    mobileSplit === 'pdf'
-                      ? 'bg-indigo-600 text-white'
-                      : 'text-slate-500'
-                  }`}
-                >
-                  <FileText className="w-4 h-4" />
-                  View PDF Reference
-                </button>
-              </div>
+              {!currentQuiz.isManual && (
+                <div className="lg:hidden flex border-t border-slate-200/50 dark:border-white/5 bg-white/40 dark:bg-[#0b0f19]/40 backdrop-blur-md p-2.5 flex-shrink-0">
+                  <button
+                    onClick={() => setMobileSplit('study')}
+                    className={`flex-1 py-2.5 rounded-xl font-bold text-xs flex items-center justify-center gap-2 transition-all ${
+                      mobileSplit === 'study'
+                        ? 'bg-indigo-600 text-white'
+                        : 'text-slate-500'
+                    }`}
+                  >
+                    <HelpCircle className="w-4 h-4" />
+                    Quiz / Review
+                  </button>
+                  <button
+                    onClick={() => setMobileSplit('pdf')}
+                    className={`flex-1 py-2.5 rounded-xl font-bold text-xs flex items-center justify-center gap-2 transition-all ${
+                      mobileSplit === 'pdf'
+                        ? 'bg-indigo-600 text-white'
+                        : 'text-slate-500'
+                    }`}
+                  >
+                    <FileText className="w-4 h-4" />
+                    View PDF Reference
+                  </button>
+                </div>
+              )}
             </div>
           )}
 
@@ -902,39 +934,64 @@ export default function App() {
                   quizzes={quizzes}
                   onSelectQuiz={handleSelectQuizFromHistory}
                   onDeleteQuiz={handleDeleteQuiz}
+                  onEditQuiz={(quiz) => {
+                    setManualQuizToEdit(quiz);
+                    setActiveTab('manual-quiz');
+                  }}
                 />
               </div>
             </div>
           )}
 
-          {/* Tab 4: Study Calendar */}
-          {activeTab === 'calendar' && (
-            <div className="h-full overflow-y-auto px-6 py-8">
-              <div className="max-w-7xl mx-auto">
-                <CalendarView
-                  user={user}
-                  quizzes={quizzes}
-                  studyEvents={studyEvents}
-                  onRefreshEvents={refreshStudyEvents}
-                  onStartQuiz={(quiz) => {
-                    setCurrentQuiz(quiz);
-                    setCurrentAttempt(null);
-                    setActiveTab('active-study');
-                    setMobileSplit('study');
-                    setLayoutMode('split');
-                  }}
-                  onViewPDF={(file) => {
-                    if (typeof file === 'string') {
-                      alert(`To view the PDF reference for "${file}", drag or open the original file in the PDF Reference Panel during an Active Quiz Session.`);
-                    } else {
-                      setActiveFile(file);
+          {/* Tab 5: Manual Quiz Creator */}
+          {activeTab === 'manual-quiz' && (
+            <div className="h-full px-4 py-6 sm:px-6 lg:py-8 lg:px-8">
+              <ManualQuizCreator
+                initialQuiz={manualQuizToEdit}
+                onCancel={() => {
+                  setManualQuizToEdit(null);
+                  setActiveTab('dashboard');
+                }}
+                onSave={async (quizData) => {
+                  if (!user) return;
+                  
+                  const isEditingManual = manualQuizToEdit && manualQuizToEdit.isManual;
+                  const newQuiz: Quiz = {
+                    id: isEditingManual ? manualQuizToEdit.id : crypto.randomUUID(),
+                    userId: user.uid,
+                    uploadDate: isEditingManual ? manualQuizToEdit.uploadDate : new Date().toISOString(),
+                    scoreHistory: isEditingManual ? manualQuizToEdit.scoreHistory : [],
+                    ...quizData,
+                  };
+
+                  try {
+                    await saveQuizToFirestore(newQuiz);
+                    setQuizzes(prev => {
+                      if (isEditingManual) {
+                        return prev.map(q => q.id === newQuiz.id ? newQuiz : q);
+                      }
+                      return [newQuiz, ...prev];
+                    });
+                    
+                    setManualQuizToEdit(null);
+                    
+                    if (!newQuiz.isDraft) {
+                      // Launch directly if published
+                      setCurrentQuiz(newQuiz);
+                      setCurrentAttempt(null);
                       setActiveTab('active-study');
-                      setMobileSplit('pdf');
-                      setLayoutMode('split');
+                      setMobileSplit('study');
+                      setLayoutMode('quiz-only');
+                    } else {
+                      // Back to history if just saved as draft
+                      setActiveTab('history');
                     }
-                  }}
-                />
-              </div>
+                  } catch (err) {
+                    console.error('Error saving manual quiz:', err);
+                    setError('Failed to save manual quiz to your cloud history.');
+                  }
+                }}
+              />
             </div>
           )}
         </main>

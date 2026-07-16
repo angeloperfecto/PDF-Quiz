@@ -120,11 +120,29 @@ export default function QuizView({ questions, onQuizSubmit, onSelectReference }:
       {/* Question Content */}
       <div className="flex-1 overflow-y-auto space-y-6 pr-1" id="quiz-question-container">
         <div className="space-y-4">
-          {questions[currentIdx].pageNumber && (
-            <span className="inline-flex items-center gap-1 text-[11px] font-bold text-indigo-600 dark:text-indigo-400 bg-indigo-500/10 dark:bg-indigo-950/30 px-2.5 py-1 rounded-md border border-indigo-500/20">
-              <Clock className="w-3 h-3" /> Grounded on Page {questions[currentIdx].pageNumber}
-            </span>
+          <div className="flex flex-wrap gap-2">
+            {questions[currentIdx].pageNumber && (
+              <span className="inline-flex items-center gap-1 text-[11px] font-bold text-indigo-600 dark:text-indigo-400 bg-indigo-500/10 dark:bg-indigo-950/30 px-2.5 py-1 rounded-md border border-indigo-500/20">
+                <Clock className="w-3 h-3" /> Grounded on Page {questions[currentIdx].pageNumber}
+              </span>
+            )}
+            {questions[currentIdx].difficulty && (
+              <span className={`inline-flex items-center gap-1 text-[11px] font-bold px-2.5 py-1 rounded-md border ${
+                questions[currentIdx].difficulty === 'Hard' ? 'text-rose-600 dark:text-rose-400 bg-rose-500/10 border-rose-500/20' :
+                questions[currentIdx].difficulty === 'Medium' ? 'text-amber-600 dark:text-amber-400 bg-amber-500/10 border-amber-500/20' :
+                'text-emerald-600 dark:text-emerald-400 bg-emerald-500/10 border-emerald-500/20'
+              }`}>
+                {questions[currentIdx].difficulty}
+              </span>
+            )}
+          </div>
+          
+          {questions[currentIdx].imageAttachment && (
+            <div className="rounded-xl overflow-hidden border border-slate-200 dark:border-white/10 max-w-sm">
+              <img src={questions[currentIdx].imageAttachment} alt="Question Reference" className="w-full h-auto object-contain bg-slate-50 dark:bg-slate-900" />
+            </div>
           )}
+
           <h4 className="text-lg font-bold text-slate-800 dark:text-slate-100 leading-relaxed font-display">
             {questions[currentIdx].questionText}
           </h4>

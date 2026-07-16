@@ -113,7 +113,7 @@ export default function ResultsView({ quiz, attempt, onRetake, onSelectReference
                 {percentage >= 80 ? 'Exceptional Work!' : percentage >= 50 ? 'Keep Practicing!' : 'Needs Revision!'}
               </h3>
               <p className="text-sm text-slate-600 dark:text-slate-300 mt-1">
-                You took a {quiz.numQuestions} question quiz in {formatTime(attempt.elapsedSeconds)} minutes on {quiz.fileName}.
+                You took a {quiz.numQuestions} question quiz in {formatTime(attempt.elapsedSeconds)} minutes on {quiz.isManual ? (quiz.title || 'this manual quiz') : quiz.fileName}.
               </p>
             </div>
 
@@ -246,9 +246,16 @@ export default function ResultsView({ quiz, attempt, onRetake, onSelectReference
                     )}
                   </div>
 
-                  <h5 className="text-base font-bold text-slate-800 dark:text-slate-100 mb-5 leading-relaxed font-display">
-                    {q.questionText}
-                  </h5>
+                  <div className="space-y-4 mb-5">
+                    {q.imageAttachment && (
+                      <div className="rounded-xl overflow-hidden border border-slate-200 dark:border-white/10 max-w-sm">
+                        <img src={q.imageAttachment} alt="Question Reference" className="w-full h-auto object-contain bg-slate-50 dark:bg-slate-900" />
+                      </div>
+                    )}
+                    <h5 className="text-base font-bold text-slate-800 dark:text-slate-100 leading-relaxed font-display">
+                      {q.questionText}
+                    </h5>
+                  </div>
 
                   {/* Options output */}
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mb-6">

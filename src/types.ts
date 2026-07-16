@@ -1,10 +1,13 @@
 export interface Question {
+  id?: string;
   questionText: string;
   options: string[];
   correctIndex: number;
   explanation?: string;
   sourceExcerpt?: string;
   pageNumber?: number;
+  difficulty?: 'Easy' | 'Medium' | 'Hard';
+  imageAttachment?: string; // base64 string
 }
 
 export interface QuizAttempt {
@@ -19,14 +22,23 @@ export interface QuizAttempt {
 export interface Quiz {
   id: string;
   userId: string;
-  fileName: string;
-  uploadDate: string;
+  
+  // PDF specific
+  fileName?: string;
+  extractedText?: string;
+  
+  // Manual specific
+  title?: string;
+  subject?: string;
+  isManual?: boolean;
+  isDraft?: boolean;
+  
+  uploadDate: string; // Used as creation date for manual
   numQuestions: number;
   difficulty: 'Easy' | 'Medium' | 'Hard' | 'Mixed';
   questionType: 'Definition' | 'Identification' | 'True/False' | 'Multiple Choice' | 'Mixed';
   questions: Question[];
   scoreHistory: QuizAttempt[];
-  extractedText?: string;
 }
 
 export interface QuizConfig {

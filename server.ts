@@ -189,13 +189,15 @@ async function generateQuizWithFallback(
   userPrompt: string,
   systemInstruction: string
 ) {
-  const models = ['gemini-3.5-flash', 'gemini-3.1-flash-lite', 'gemini-flash-latest', 'gemini-3.1-pro-preview'];
+  const models = ['gemini-3.5-flash', 'gemini-3.1-flash-lite', 'gemini-3.1-pro-preview'];
   let lastError: any = null;
 
   for (const model of models) {
-    for (let attempt = 1; attempt <= 2; attempt++) {
+    // Only 1 attempt per model to prevent hitting the Cloud Run 60s/120s ingress timeout
+    // which causes the browser to throw "Failed to fetch" if the request takes too long.
+    for (let attempt = 1; attempt <= 1; attempt++) {
       try {
-        console.log(`Generating quiz content using model ${model} (attempt ${attempt}/2)...`);
+        console.log(`Generating quiz content using model ${model}...`);
         const response = await aiClient.models.generateContent({
           model,
           contents: userPrompt,
@@ -214,12 +216,13 @@ async function generateQuizWithFallback(
                     type: 'ARRAY',
                     items: { type: 'STRING' }
                   },
-                  correctIndex: { type: 'INTEGER' },
+                  correctAnswerText: { type: 'STRING', description: 'The exact text of the correct option. This must exactly match one of the items in the options array.' },
+                  correctIndex: { type: 'INTEGER', description: 'The 0-based index (0, 1, 2, or 3) in the options array that matches the correctAnswerText.' },
                   explanation: { type: 'STRING' },
                   sourceExcerpt: { type: 'STRING' },
                   pageNumber: { type: 'INTEGER' }
                 },
-                required: ['questionText', 'options', 'correctIndex', 'explanation', 'sourceExcerpt']
+                required: ['questionText', 'options', 'correctAnswerText', 'correctIndex', 'explanation', 'sourceExcerpt']
               }
             }
           }
@@ -314,7 +317,8 @@ Rules:
 3. Structured JSON Schema: Return a valid JSON array where each element contains:
    - "questionText": string (the exact original question text and numbering).
    - "options": array of exactly 4 strings.
-   - "correctIndex": integer (0, 1, 2, or 3).
+   - "correctAnswerText": string (the exact string text of the correct option).
+   - "correctIndex": integer (0, 1, 2, or 3) representing the index of the correctAnswerText in the options array.
    - "explanation": string (extremely concise, max 15 words explaining why the option is correct).
    - "sourceExcerpt": string (extremely short verbatim text snippet, max 15 words).
    - "pageNumber": integer (approximate page number or best estimate).
@@ -343,6 +347,20 @@ Adhere strictly to the system instruction. Generate a valid JSON array of questi
       if (!quizQuestions || quizQuestions.length === 0) {
         throw new Error('No valid questions could be parsed from the response.');
       }
+
+      // Fix correctIndex if correctAnswerText is provided and matches an option but correctIndex is wrong
+      quizQuestions.forEach(q => {
+        if (q.correctAnswerText && Array.isArray(q.options)) {
+          const actualIndex = q.options.findIndex((opt: string) => 
+            String(opt).trim().toLowerCase() === String(q.correctAnswerText).trim().toLowerCase()
+          );
+          if (actualIndex !== -1 && actualIndex !== q.correctIndex) {
+            console.log(`Fixing correctIndex for question: "${q.questionText}". Provided index: ${q.correctIndex}, Actual index: ${actualIndex}`);
+            q.correctIndex = actualIndex;
+          }
+        }
+      });
+
       res.json({ questions: quizQuestions });
     } catch (parseErr) {
       console.error('Error parsing JSON from Gemini response:', responseText, parseErr);
@@ -357,6 +375,8 @@ Adhere strictly to the system instruction. Generate a valid JSON array of questi
     const { message, code, status } = getErrorDetails(error);
     const friendlyError = code === 503 || status === 'UNAVAILABLE' || message.toLowerCase().includes('unavailable') || message.toLowerCase().includes('503')
       ? 'All available Gemini models are currently experiencing extremely high demand. Please try again in a few moments.'
+      : message.toLowerCase().includes('fetch failed')
+      ? 'The connection to the AI service was interrupted or timed out. Please try generating the quiz again.'
       : message || 'An error occurred during quiz generation.';
     res.status(500).json({ error: friendlyError });
   }
