@@ -117,124 +117,173 @@ export default function UploadZone({ onQuizGenerated, isLoading, setIsLoading }:
       let combinedText = '';
       const totalPagesToProcess = end - start + 1;
       let ocrWorker: any = null;
+      let pdfBase64: string | undefined = undefined;
 
-      for (let i = start; i <= end; i++) {
-        const pageIndex = i - start;
-        const percent = Math.round((pageIndex / totalPagesToProcess) * 80); // First 80% is extraction
-        setProgressPercent(percent);
-        setProgressStep(`Extracting text from page ${i} of ${totalPages}...`);
+      // Read PDF file as Base64 for improved Gemini analysis
+      if (useAllPages && file.size <= 25 * 1024 * 1024) { // Only if using all pages and under 25MB
+        try {
+          setProgressStep('Encoding document for deep AI analysis...');
+          pdfBase64 = await new Promise<string>((resolve, reject) => {
+            const reader = new FileReader();
+            reader.onload = () => resolve((reader.result as string).split(',')[1]);
+            reader.onerror = reject;
+            reader.readAsDataURL(file);
+          });
+        } catch (e) {
+          console.warn('Failed to encode PDF to base64, falling back to text only', e);
+        }
+      }
 
-        const page = await pdfDoc.getPage(i);
-        const textContent = await page.getTextContent();
-        let pageText = textContent.items
-          .map((item: any) => item.str)
-          .join(' ')
-          .replace(/\s+/g, ' ')
-          .trim();
+      let attempt = 1;
+      let currentForceOCR = forceOCR;
+      let data: any = null;
+      let finalCombinedText = '';
 
-        // Automatic OCR detection: if text is very short, looks empty, or if Force OCR is enabled
-        const alphanumericCount = (pageText.replace(/[^a-zA-Z0-9]/g, '')).length;
-        const needsOCR = forceOCR || pageText.length < 150 || alphanumericCount < 80;
+      while (attempt <= 2) {
+        combinedText = '';
+        
+        for (let i = start; i <= end; i++) {
+          const pageIndex = i - start;
+          const percent = Math.round((pageIndex / totalPagesToProcess) * (attempt === 1 ? 50 : 80)); 
+          setProgressPercent(percent);
+          setProgressStep(attempt === 2 
+            ? `Retry Attempt 2: Performing deep OCR scan on page ${i} of ${totalPages}...` 
+            : `Extracting text from page ${i} of ${totalPages}...`);
 
-        if (needsOCR) {
-          setProgressStep(`Scanned page or complex layout detected. Performing OCR on page ${i}...`);
-          
-          // Lazy initialize OCR worker to save resources
-          if (!ocrWorker) {
-            ocrWorker = await createWorker('eng');
+          const page = await pdfDoc.getPage(i);
+          const textContent = await page.getTextContent();
+          let pageText = textContent.items
+            .map((item: any) => item.str)
+            .join(' ')
+            .replace(/\s+/g, ' ')
+            .trim();
+
+          // Automatic OCR detection: if text is very short, looks empty, or if Force OCR is enabled
+          const alphanumericCount = (pageText.replace(/[^a-zA-Z0-9]/g, '')).length;
+          const needsOCR = currentForceOCR || pageText.length < 150 || alphanumericCount < 80;
+
+          if (needsOCR) {
+            setProgressStep(attempt === 2 
+              ? `Retry Attempt 2: Deep OCR on page ${i}...` 
+              : `Scanned page or complex layout detected. Performing OCR on page ${i}...`);
+            
+            // Lazy initialize OCR worker to save resources
+            if (!ocrWorker) {
+              const { createWorker } = await import('tesseract.js');
+              ocrWorker = await createWorker('eng');
+            }
+
+            // Render page to canvas to get image data
+            const viewport = page.getViewport({ scale: 1.5 });
+            const canvas = document.createElement('canvas');
+            const context = canvas.getContext('2d');
+            canvas.height = viewport.height;
+            canvas.width = viewport.width;
+
+            if (context) {
+              await page.render({ canvasContext: context, viewport }).promise;
+              const { data: { text } } = await ocrWorker.recognize(canvas);
+              pageText = text.trim();
+            }
           }
 
-          // Render page to canvas to get image data
-          const viewport = page.getViewport({ scale: 1.5 });
-          const canvas = document.createElement('canvas');
-          const context = canvas.getContext('2d');
-          canvas.height = viewport.height;
-          canvas.width = viewport.width;
-
-          if (context) {
-            await page.render({ canvasContext: context, viewport }).promise;
-            const { data: { text } } = await ocrWorker.recognize(canvas);
-            pageText = text.trim();
-          }
+          combinedText += `\n--- PAGE ${i} ---\n${pageText}\n`;
         }
 
-        combinedText += `\n--- PAGE ${i} ---\n${pageText}\n`;
+        if (combinedText.trim().length < 100) {
+          throw new Error('Could not extract sufficient text from the PDF. The document might be fully encrypted, empty, or contain unreadable imagery.');
+        }
+
+        // Truncate to ~1000 pages of text to prevent API timeouts and "fetch failed" errors on massive documents
+        const MAX_TEXT_LENGTH = 2000000;
+        if (combinedText.length > MAX_TEXT_LENGTH) {
+          combinedText = combinedText.substring(0, MAX_TEXT_LENGTH) + '\n\n...[DOCUMENT TRUNCATED DUE TO LENGTH LIMITS]...';
+          console.warn('PDF text was truncated because it exceeded the maximum allowed length.');
+        }
+        
+        finalCombinedText = combinedText;
+
+        setProgressStep(`Analyzing content and generating questions with Gemini AI (Attempt ${attempt})...`);
+        setProgressPercent(90);
+
+        const config: any = {
+          numQuestions,
+          difficulty,
+          questionType,
+          pageRangeStart: start,
+          pageRangeEnd: end,
+          allPages: useAllPages,
+        };
+
+        let response;
+        try {
+          response = await fetch('/api/generate-quiz', {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({
+              text: combinedText,
+              pdfBase64: attempt === 1 ? pdfBase64 : undefined,
+              config,
+            }),
+          });
+        } catch (fetchErr: any) {
+          throw new Error('Network error: Could not connect to the server or the connection timed out. Please try again with a smaller document or fewer pages.');
+        }
+
+        const contentType = response.headers.get('content-type');
+        if (contentType && contentType.includes('application/json')) {
+          data = await response.json();
+        } else {
+          const textResponse = await response.text();
+          console.error('Non-JSON response received from server:', textResponse);
+          if (!response.ok) {
+            throw new Error(`The quiz generator server encountered an unexpected error (Status ${response.status}). Please try again in a moment.`);
+          }
+          throw new Error('Received an unexpected non-JSON response from the server.');
+        }
+
+        if (!response.ok) {
+          throw new Error(data.error || 'Failed to generate quiz. Please try again.');
+        }
+
+        // Validation Step
+        if (data.totalQuestionsInPDF > 0 && data.questions.length !== data.totalQuestionsInPDF) {
+          if (attempt === 1 && !currentForceOCR) {
+             console.log(`Validation failed (found ${data.totalQuestionsInPDF} but extracted ${data.questions.length}). Retrying with Force OCR...`);
+             currentForceOCR = true;
+             attempt++;
+             continue; // Retry the while loop
+          } else {
+             throw new Error(`Extraction Issue Detected:\nThe system found ${data.totalQuestionsInPDF} questions in the PDF, but only successfully extracted ${data.questions.length}.\n\nAI Validation Message: ${data.validationMessage || 'Some questions were missed or skipped.'}`);
+          }
+        } else {
+          if (data.validationMessage) {
+            console.log("Extraction Validation:", data.validationMessage);
+          }
+          break;
+        }
       }
 
       if (ocrWorker) {
         await ocrWorker.terminate();
       }
 
-      if (combinedText.trim().length < 100) {
-        throw new Error('Could not extract sufficient text from the PDF. The document might be fully encrypted, empty, or contain unreadable imagery.');
-      }
-
-      // Truncate to ~100 pages of text to prevent API timeouts and "fetch failed" errors on massive documents
-      const MAX_TEXT_LENGTH = 200000;
-      if (combinedText.length > MAX_TEXT_LENGTH) {
-        combinedText = combinedText.substring(0, MAX_TEXT_LENGTH) + '\n\n...[DOCUMENT TRUNCATED DUE TO LENGTH LIMITS]...';
-        console.warn('PDF text was truncated because it exceeded the maximum allowed length.');
-      }
-
-      setProgressStep('Analyzing content and generating questions with Gemini AI...');
-      setProgressPercent(90);
-
-      const config: QuizConfig = {
-        numQuestions,
-        difficulty,
-        questionType,
-        pageRangeStart: start,
-        pageRangeEnd: end,
-        allPages: useAllPages,
-      };
-
-      let response;
-      try {
-        response = await fetch('/api/generate-quiz', {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-          },
-          body: JSON.stringify({
-            text: combinedText,
-            config,
-          }),
-        });
-      } catch (fetchErr: any) {
-        throw new Error('Network error: Could not connect to the server or the connection timed out. Please try again with a smaller document or fewer pages.');
-      }
-
-      let data: any = {};
-      const contentType = response.headers.get('content-type');
-      if (contentType && contentType.includes('application/json')) {
-        data = await response.json();
-      } else {
-        const textResponse = await response.text();
-        console.error('Non-JSON response received from server:', textResponse);
-        if (!response.ok) {
-          throw new Error(`The quiz generator server encountered an unexpected error (Status ${response.status}). Please try again in a moment.`);
-        }
-        throw new Error('Received an unexpected non-JSON response from the server.');
-      }
-
-      if (!response.ok) {
-        throw new Error(data.error || 'Failed to generate quiz. Please try again.');
-      }
-
       setProgressPercent(100);
-
-      // Validation Step: Check if all questions were extracted
-      if (data.totalQuestionsInPDF > 0 && data.questions.length !== data.totalQuestionsInPDF) {
-        alert(`Extraction Issue Detected:\nThe system found ${data.totalQuestionsInPDF} questions in the PDF, but only successfully extracted ${data.questions.length}.\n\nAI Validation Message: ${data.validationMessage || 'Some questions were missed.'}`);
-      } else if (data.validationMessage) {
-        console.log("Extraction Validation:", data.validationMessage);
-      }
 
       onQuizGenerated({
         fileName: file.name,
         questions: data.questions,
-        config,
-        extractedText: combinedText,
+        config: {
+          numQuestions,
+          difficulty,
+          questionType,
+          pageRangeStart: start,
+          pageRangeEnd: end,
+          allPages: useAllPages,
+        },
+        extractedText: finalCombinedText,
       });
 
     } catch (err: any) {
@@ -245,7 +294,7 @@ export default function UploadZone({ onQuizGenerated, isLoading, setIsLoading }:
       setProgressStep('');
       setProgressPercent(0);
     }
-  };
+  };;
 
   return (
     <div className="w-full max-w-4xl mx-auto" id="upload-zone-container">

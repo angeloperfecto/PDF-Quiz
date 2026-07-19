@@ -204,10 +204,10 @@ function parseQuizQuestions(rawJsonStr: string): { questions: any[], totalQuesti
 // Robust generator function with model pool and backoff retry logic
 async function generateQuizWithFallback(
   aiClient: GoogleGenAI,
-  userPrompt: string,
+  userPrompt: any,
   systemInstruction: string
 ) {
-  const models = ['gemini-3.5-flash', 'gemini-3.1-flash-lite', 'gemini-3.1-pro-preview'];
+  const models = ['gemini-3.1-pro-preview', 'gemini-3.5-flash', 'gemini-3.1-flash-lite'];
   let lastError: any = null;
 
   for (const model of models) {
@@ -290,7 +290,7 @@ const app = express();
 const PORT = 3000;
 
 // Increase body limit for large PDF text uploads
-app.use(express.json({ limit: '15mb' }));
+app.use(express.json({ limit: '50mb' }));
 
 // API endpoint to check configuration and health
 app.get('/api/health', (req, res) => {
@@ -309,10 +309,10 @@ app.post('/api/generate-quiz', async (req, res) => {
       });
     }
 
-    const { text, config } = req.body;
+    const { text, config, pdfBase64 } = req.body;
 
-    if (!text || typeof text !== 'string' || text.trim().length === 0) {
-      return res.status(400).json({ error: 'Extracted PDF text is required and cannot be empty.' });
+    if (!pdfBase64 && (!text || typeof text !== 'string' || text.trim().length === 0)) {
+      return res.status(400).json({ error: 'Extracted PDF text or PDF file is required and cannot be empty.' });
     }
 
     const rawNumQuestions = config?.numQuestions !== undefined ? config.numQuestions : 10;
@@ -324,61 +324,106 @@ app.post('/api/generate-quiz', async (req, res) => {
     const questionType = config?.questionType || 'Mixed';
 
     const systemInstruction = `You are an expert, document-grounded multiple-choice quiz scanner, extractor, and generator.
-Your absolute, highest-priority goal is to scan the provided PDF text, identify ALL pre-existing questions, and faithfully extract every single one of them onto the website without any omissions, alterations, or summaries.
+Your absolute, highest-priority goal is to scan the provided PDF, identify ALL pre-existing questions, and faithfully extract every single one of them onto the website without any omissions, alterations, or summaries.
 
 CRITICAL MANDATES FOR PRE-EXISTING QUESTIONS IN THE PDF:
-1. 100% COMPLETE COVERAGE: You MUST scan and extract EVERY SINGLE pre-existing question found in the PDF. No questions should be skipped, omitted, summarized, or condensed. The extraction process must achieve 100% coverage.
-2. FAITHFUL REPRODUCTION: Reproduce the complete set of questions exactly as they appear in the original document. Preserve original numbering (e.g., "Question 1", "1. ", "10."), formatting, ordering, and exact verbatim wording of the question texts. Do NOT paraphrase, summarize, or alter their meaning or structure.
-3. MULTIPLE-CHOICE OPTIONS PRESERVATION: 
-   - If the original question has multiple-choice options in the PDF text, extract those options EXACTLY as they are and in their exact original order.
-   - If the original question has fewer than 4 options or is a true/false, fill-in-the-blank, or open-ended question, you must map it into a 4-option structure (A, B, C, D) where the correct answer is faithfully represented as one of the options, and the others are plausible, realistic distractors directly derived from the document context.
-   - Ensure "options" is always a valid JSON array of exactly 4 choices (A, B, C, D).
-4. RECOVERY OF ANSWERS: Correctly identify the "correctIndex" (0 to 3) by matching the correct answer against any answer key provided in the document or by logical analysis of the context.
-5. COMPLETE INTEGRATION: Completely ignore any user-specified question count limit if pre-existing questions are present. Your priority is to extract ALL of them (up to 50 questions) to ensure the user can answer the exact full original worksheet/exam on the website.
-6. NEW GENERATION FALLBACK: Only if there are absolutely NO pre-existing questions in the PDF, you should generate brand new high-quality multiple-choice questions from the informational content of the document up to the limit of ${numQuestionsStr}.
+1. 100% COMPLETE COVERAGE (NO OMISSIONS): You MUST scan and extract EVERY SINGLE pre-existing question found in the PDF. No questions should be skipped, omitted, summarized, or condensed. Do not stop early. If the document has hundreds of questions, you must extract every single one. You must seamlessly bridge multi-page and multi-line questions.
+2. FAITHFUL REPRODUCTION: Reproduce the complete set of questions exactly as they appear in the original document. Preserve original numbering (e.g., "Question 1", "1. ", "10."), formatting, ordering, and exact verbatim wording. You must accurately capture tables, mathematical expressions, symbols, and special characters. Ensure no question is skipped because of page breaks, inconsistent spacing, headers, footers, or formatting differences.
+3. PRESERVE ALL OPTIONS:
+   - Extract all answer choices exactly as they appear in the PDF (e.g., A, B, C, D, E) including multi-line answer choices.
+   - If the original question has fewer or more than 4 options, map it faithfully into a 4-option structure (A, B, C, D) without losing the original meaning. The correct answer must be one of the options.
+4. RECOVERY OF ANSWERS: Correctly identify the "correctIndex" (0 to 3) by matching the correct answer against any answer key provided, or by logical analysis.
+5. COMPLETE INTEGRATION: Completely ignore any user-specified question count limit if pre-existing questions are present. Your priority is to extract ALL of them to ensure the user gets exactly what is in the PDF.
+6. NEW GENERATION FALLBACK: Only if there are absolutely NO pre-existing questions in the PDF, generate new multiple-choice questions from the informational content up to ${numQuestionsStr}.
 
 Rules:
-1. Strict Accuracy: Do not hallucinate or guess. Every question, option, correct index, and explanation must be 100% backed by the provided text.
-2. Technical Preservation: Keep all exact numerical values, formulas, dates, names, standard identifiers, and units perfectly intact.
+1. Strict Accuracy: Every question, option, correct index, and explanation must be 100% backed by the provided text or document.
+2. Technical Preservation: Keep all exact numerical values, formulas, dates, names, standard identifiers, units, and symbols perfectly intact.
 3. Structured JSON Schema: Return a valid JSON object with the following properties:
-   - "totalQuestionsInPDF": integer (The exact count of pre-existing questions found in the document, or 0 if generating new questions).
-   - "validationMessage": string (A message confirming extraction success or noting missing items).
+   - "totalQuestionsInPDF": integer (The EXACT count of pre-existing questions found in the document, or 0 if generating new questions. YOU MUST ACCURATELY COUNT THEM FIRST).
+   - "validationMessage": string (A detailed message confirming extraction success or indicating which pages/questions failed or are unclear).
    - "questions": array of objects where each element contains:
      - "questionText": string (the exact original question text and numbering).
      - "options": array of exactly 4 strings.
      - "correctAnswerText": string (the exact string text of the correct option).
      - "correctIndex": integer (0, 1, 2, or 3) representing the index of the correctAnswerText in the options array.
-     - "explanation": string (extremely concise, max 15 words explaining why the option is correct).
+     - "explanation": string (extremely concise, max 15 words).
      - "sourceExcerpt": string (extremely short verbatim text snippet, max 15 words).
-     - "pageNumber": integer (approximate page number or best estimate).
-4. No custom formatting outside the JSON object. Do NOT use markdown code blocks (\`\`\`json). Just return the raw JSON object.`;
+     - "pageNumber": integer (approximate page number).
+4. No custom formatting outside the JSON object. Do NOT use markdown code blocks. Just return the raw JSON object.`;
 
-    const userPrompt = `Your absolute, most critical directive is to scan the provided source text for any pre-existing questions, worksheets, quizzes, or exams.
-If pre-existing questions are found, you MUST extract ALL of them, preserving their exact wording, original numbering, ordering, options, and meaning with 100% complete coverage and zero omissions. Converting them to standard 4-option multiple choice structure where necessary. Completely ignore the count limit of ${numQuestionsStr} and extract all pre-existing questions found.
+    const promptInstructions = `Your absolute, most critical directive is to scan the provided source material for any pre-existing questions, worksheets, quizzes, or exams.
+If pre-existing questions are found, you MUST extract ALL of them, preserving their exact wording, original numbering, ordering, options, and meaning with 100% complete coverage and zero omissions. Converting them to standard 4-option multiple choice structure where necessary. Completely ignore the count limit of ${numQuestionsStr} and extract all pre-existing questions found. DO NOT SUMMARIZE. DO NOT SKIP QUESTIONS.
 
 If there are NO pre-existing questions in the text, then generate up to ${numQuestionsStr} brand new high-quality multiple-choice questions of difficulty "${difficulty}" and type "${questionType}" based on the informational content.
 
---- BEGIN SOURCE TEXT ---
-${text}
---- END SOURCE TEXT ---
+Before generating the final JSON array, you MUST count exactly how many questions are physically present in the document. The length of your "questions" array MUST exactly match this count. If there is any discrepancy, you have failed your directive.
 
 Adhere strictly to the system instruction. Generate a valid JSON object matching the schema.`;
 
-    const response = await generateQuizWithFallback(ai, userPrompt, systemInstruction);
+    let parsedData: any = null;
+    let quizQuestions: any[] = [];
+    let success = false;
+    let finalResponseText = '';
 
-    const responseText = response.text;
-    if (!responseText) {
-      return res.status(500).json({ error: 'Empty response returned from Gemini AI.' });
+    const strategies = [];
+    if (pdfBase64) {
+      strategies.push({
+        type: 'pdf',
+        prompt: [
+          { inlineData: { mimeType: 'application/pdf', data: pdfBase64 } },
+          promptInstructions
+        ]
+      });
+    }
+    if (text && text.trim().length > 0) {
+      strategies.push({
+        type: 'text',
+        prompt: `${promptInstructions}\n\n--- BEGIN SOURCE TEXT ---\n${text}\n--- END SOURCE TEXT ---`
+      });
+    }
+
+    for (let i = 0; i < strategies.length; i++) {
+      const strategy = strategies[i];
+      console.log(`Trying extraction strategy: ${strategy.type}`);
+      try {
+        const response = await generateQuizWithFallback(ai, strategy.prompt, systemInstruction);
+        const responseText = response.text;
+        
+        if (!responseText) continue;
+        
+        finalResponseText = responseText;
+        const currentParsedData = parseQuizQuestions(responseText);
+        const currentQuestions = currentParsedData.questions;
+        
+        if (currentQuestions && currentQuestions.length > 0) {
+          const totalInPdf = currentParsedData.totalQuestionsInPDF || 0;
+          if (totalInPdf > 0 && currentQuestions.length !== totalInPdf) {
+             console.log(`Validation failed for strategy ${strategy.type}: Found ${totalInPdf} questions but extracted ${currentQuestions.length}. Retrying if possible.`);
+             // Keep the best attempt so far
+             if (!parsedData || currentQuestions.length > quizQuestions.length) {
+               parsedData = currentParsedData;
+               quizQuestions = currentQuestions;
+             }
+             continue; // try next strategy
+          } else {
+             // Validation passed!
+             success = true;
+             parsedData = currentParsedData;
+             quizQuestions = currentQuestions;
+             break;
+          }
+        }
+      } catch (err) {
+        console.error(`Strategy ${strategy.type} failed:`, err);
+      }
+    }
+
+    if (!parsedData || quizQuestions.length === 0) {
+      return res.status(500).json({ error: 'No valid questions could be parsed from the response after all extraction strategies failed.' });
     }
 
     try {
-      const parsedData = parseQuizQuestions(responseText);
-      const quizQuestions = parsedData.questions;
-
-      if (!quizQuestions || quizQuestions.length === 0) {
-        throw new Error('No valid questions could be parsed from the response.');
-      }
-
       // Fix correctIndex if correctAnswerText is provided and matches an option but correctIndex is wrong
       quizQuestions.forEach(q => {
         if (q.correctAnswerText && Array.isArray(q.options)) {
@@ -394,10 +439,10 @@ Adhere strictly to the system instruction. Generate a valid JSON object matching
 
       res.json(parsedData);
     } catch (parseErr) {
-      console.error('Error parsing JSON from Gemini response:', responseText, parseErr);
+      console.error('Error post-processing JSON from Gemini response:', finalResponseText, parseErr);
       res.status(500).json({
         error: 'Failed to parse structured JSON from Gemini response.',
-        rawResponse: responseText,
+        rawResponse: finalResponseText,
       });
     }
 
