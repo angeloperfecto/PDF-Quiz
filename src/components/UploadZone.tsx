@@ -26,7 +26,7 @@ export default function UploadZone({ onQuizGenerated, isLoading, setIsLoading }:
   const [error, setError] = useState<string | null>(null);
 
   // Generation configurations
-  const [numQuestions, setNumQuestions] = useState<number>(10);
+  const [numQuestions, setNumQuestions] = useState<number>(-1);
   const [difficulty, setDifficulty] = useState<QuizConfig['difficulty']>('Medium');
   const [questionType, setQuestionType] = useState<QuizConfig['questionType']>('Mixed');
   const [useAllPages, setUseAllPages] = useState<boolean>(true);

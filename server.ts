@@ -227,7 +227,7 @@ async function generateQuizWithFallback(
             responseSchema: {
               type: 'OBJECT',
               properties: {
-                totalQuestionsInPDF: { type: 'INTEGER', description: 'The exact count of pre-existing questions found in the document. Set to 0 if generating new questions.' },
+                totalQuestionsInPDF: { type: 'INTEGER', description: 'The TRUE EXACT count of pre-existing questions physically present in the document. Do not lie. Count them all. Set to 0 if generating new questions.' },
                 validationMessage: { type: 'STRING', description: 'A brief message detailing if all questions were successfully extracted or if any were missed.' },
                 questions: {
                   type: 'ARRAY',
@@ -353,11 +353,13 @@ Rules:
 4. No custom formatting outside the JSON object. Do NOT use markdown code blocks. Just return the raw JSON object.`;
 
     const promptInstructions = `Your absolute, most critical directive is to scan the provided source material for any pre-existing questions, worksheets, quizzes, or exams.
-If pre-existing questions are found, you MUST extract ALL of them, preserving their exact wording, original numbering, ordering, options, and meaning with 100% complete coverage and zero omissions. Converting them to standard 4-option multiple choice structure where necessary. Completely ignore the count limit of ${numQuestionsStr} and extract all pre-existing questions found. DO NOT SUMMARIZE. DO NOT SKIP QUESTIONS.
+If pre-existing questions are found, you MUST extract ALL of them, preserving their exact wording, original numbering, ordering, options, and meaning with 100% complete coverage and zero omissions. Converting them to standard 4-option multiple choice structure where necessary. Completely ignore the count limit of ${numQuestionsStr} and extract all pre-existing questions found. DO NOT SUMMARIZE. DO NOT SKIP QUESTIONS. DO NOT STOP AT 1 QUESTION IF THERE ARE MORE.
+
+CRITICAL SYSTEM WARNING: Previous extractions failed because the AI lazily extracted only 1 question when dozens were present in the PDF. You are being strictly monitored. If you return only 1 question for a document containing multiple questions, you have catastrophically failed your primary directive. YOU MUST EXTRACT EVERY SINGLE QUESTION. Do NOT be lazy.
 
 If there are NO pre-existing questions in the text, then generate up to ${numQuestionsStr} brand new high-quality multiple-choice questions of difficulty "${difficulty}" and type "${questionType}" based on the informational content.
 
-Before generating the final JSON array, you MUST count exactly how many questions are physically present in the document. The length of your "questions" array MUST exactly match this count. If there is any discrepancy, you have failed your directive.
+Before generating the final JSON array, you MUST count exactly how many questions are physically present in the document. The length of your "questions" array MUST exactly match this count. If you return 1 question, but there are 10 questions in the text, you have failed. If there are 50 questions, you MUST return all 50.
 
 Adhere strictly to the system instruction. Generate a valid JSON object matching the schema.`;
 
@@ -367,6 +369,12 @@ Adhere strictly to the system instruction. Generate a valid JSON object matching
     let finalResponseText = '';
 
     const strategies = [];
+    if (text && text.trim().length > 0) {
+      strategies.push({
+        type: 'text',
+        prompt: `${promptInstructions}\n\n--- BEGIN SOURCE TEXT ---\n${text}\n--- END SOURCE TEXT ---`
+      });
+    }
     if (pdfBase64) {
       strategies.push({
         type: 'pdf',
@@ -374,12 +382,6 @@ Adhere strictly to the system instruction. Generate a valid JSON object matching
           { inlineData: { mimeType: 'application/pdf', data: pdfBase64 } },
           promptInstructions
         ]
-      });
-    }
-    if (text && text.trim().length > 0) {
-      strategies.push({
-        type: 'text',
-        prompt: `${promptInstructions}\n\n--- BEGIN SOURCE TEXT ---\n${text}\n--- END SOURCE TEXT ---`
       });
     }
 
@@ -397,6 +399,7 @@ Adhere strictly to the system instruction. Generate a valid JSON object matching
         const currentQuestions = currentParsedData.questions;
         
         if (currentQuestions && currentQuestions.length > 0) {
+          console.log(`Model extracted ${currentQuestions.length} questions. totalQuestionsInPDF reported by model: ${currentParsedData.totalQuestionsInPDF || 0}`);
           const totalInPdf = currentParsedData.totalQuestionsInPDF || 0;
           if (totalInPdf > 0 && currentQuestions.length !== totalInPdf) {
              console.log(`Validation failed for strategy ${strategy.type}: Found ${totalInPdf} questions but extracted ${currentQuestions.length}. Retrying if possible.`);
