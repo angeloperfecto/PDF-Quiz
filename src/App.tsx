@@ -773,12 +773,12 @@ export default function App() {
           {activeTab === 'active-study' && currentQuiz && (
             <div className="h-full flex flex-col lg:flex-row">
               {/* Left Panel: Quiz taking or scoring Results */}
-              <div className={`h-full flex flex-col p-6 overflow-hidden border-r border-slate-200 dark:border-slate-800 ${
-                layoutMode === 'quiz-only' ? 'w-full lg:w-full' :
-                layoutMode === 'pdf-only' ? 'hidden' :
-                'w-full lg:w-3/5'
+              <div className={`h-full flex-col p-6 overflow-hidden border-r border-slate-200 dark:border-slate-800 ${
+                mobileSplit === 'study' ? 'flex' : 'hidden'
               } ${
-                mobileSplit === 'study' ? 'flex' : 'hidden lg:flex'
+                layoutMode === 'pdf-only' ? 'lg:hidden' : 'lg:flex'
+              } ${
+                layoutMode === 'quiz-only' ? 'w-full lg:w-full' : 'w-full lg:w-3/5'
               }`}>
                 {/* Panel Header with Maximize / Minimize controls */}
                 <div className="hidden lg:flex items-center justify-between pb-3 mb-2 border-b border-slate-200/30 dark:border-white/5 flex-shrink-0">
@@ -847,12 +847,12 @@ export default function App() {
               </div>
 
                {/* Right Panel: Interactive PDF Viewer */}
-              <div className={`h-full flex flex-col p-6 overflow-hidden bg-white/20 dark:bg-slate-900/40 ${
-                layoutMode === 'pdf-only' ? 'w-full lg:w-full' :
-                layoutMode === 'quiz-only' ? 'hidden' :
-                'w-full lg:w-2/5'
+              <div className={`h-full flex-col p-6 overflow-hidden bg-white/20 dark:bg-slate-900/40 ${
+                mobileSplit === 'pdf' ? 'flex' : 'hidden'
               } ${
-                mobileSplit === 'pdf' ? 'flex' : 'hidden lg:flex'
+                layoutMode === 'quiz-only' ? 'lg:hidden' : 'lg:flex'
+              } ${
+                layoutMode === 'pdf-only' ? 'w-full lg:w-full' : 'w-full lg:w-2/5'
               }`}>
                 {/* Panel Header with Maximize / Minimize controls */}
                 <div className="hidden lg:flex items-center justify-between pb-3 mb-2 border-b border-slate-200/30 dark:border-white/5 flex-shrink-0">
