@@ -231,7 +231,7 @@ export default function App() {
   };
 
   // Submit quiz answers and score
-  const handleQuizSubmit = async (userAnswers: number[], elapsedSeconds: number) => {
+  const handleQuizSubmit = async (userAnswers: number[], elapsedSeconds: number, questionMap?: number[], optionMaps?: number[][]) => {
     if (!currentQuiz || !user) return;
 
     let score = 0;
@@ -250,6 +250,8 @@ export default function App() {
       percentage,
       elapsedSeconds,
       userAnswers,
+      questionMap,
+      optionMaps: optionMaps?.map(om => JSON.stringify(om)),
     };
 
     try {
@@ -821,8 +823,8 @@ export default function App() {
                   ) : (
                     <QuizView
                       questions={currentQuiz.questions}
-                      onQuizSubmit={(userAnswers, elapsedSeconds) => {
-                        handleQuizSubmit(userAnswers, elapsedSeconds);
+                      onQuizSubmit={(userAnswers, elapsedSeconds, questionMap, optionMaps) => {
+                        handleQuizSubmit(userAnswers, elapsedSeconds, questionMap, optionMaps);
                       }}
                       onSelectReference={(page, text) => {
                         handleSelectReference(page, text);

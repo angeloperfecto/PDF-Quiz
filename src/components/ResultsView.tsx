@@ -80,11 +80,37 @@ export default function ResultsView({ quiz, attempt, onRetake, onSelectReference
     window.print();
   };
 
+  // Reconstruct display order and options based on questionMap and optionMaps if they exist
+  const displayQuestions = attempt.questionMap && attempt.optionMaps
+    ? attempt.questionMap.map((origIdx, k) => {
+        const q = quiz.questions[origIdx];
+        const optMap: number[] = typeof attempt.optionMaps![k] === 'string' 
+          ? JSON.parse(attempt.optionMaps![k] as unknown as string) 
+          : attempt.optionMaps![k];
+        const shuffledOptions = optMap.map(i => q.options[i]);
+        const newCorrectIndex = optMap.indexOf(q.correctIndex);
+        return {
+          ...q,
+          options: shuffledOptions,
+          correctIndex: newCorrectIndex,
+          originalIdx: origIdx,
+          mappedDisplayIdx: k,
+          optMap
+        };
+      })
+    : quiz.questions.map((q, idx) => ({ 
+        ...q, 
+        originalIdx: idx, 
+        mappedDisplayIdx: idx,
+        optMap: q.options.map((_, i) => i) 
+      }));
+
   // Filter questions based on active tab
-  const filteredQuestions = quiz.questions.map((q, idx) => ({ q, idx })).filter(({ q, idx }) => {
-    const isCorrect = attempt.userAnswers[idx] === q.correctIndex;
-    if (activeQuestionTab === 'correct') return isCorrect;
-    if (activeQuestionTab === 'incorrect') return !isCorrect;
+  const filteredQuestions = displayQuestions.filter((q) => {
+    const userAnswerOriginalOptIdx = attempt.userAnswers[q.originalIdx];
+    const originalIsCorrect = userAnswerOriginalOptIdx === quiz.questions[q.originalIdx].correctIndex;
+    if (activeQuestionTab === 'correct') return originalIsCorrect;
+    if (activeQuestionTab === 'incorrect') return !originalIsCorrect;
     return true;
   });
 
@@ -203,15 +229,17 @@ export default function ResultsView({ quiz, attempt, onRetake, onSelectReference
               <p className="text-sm text-slate-600 dark:text-slate-300 font-medium">No questions match the active review filter.</p>
             </div>
           ) : (
-            filteredQuestions.map(({ q, idx }) => {
-              const userAnswer = attempt.userAnswers[idx];
-              const isCorrect = userAnswer === q.correctIndex;
+            filteredQuestions.map((q, arrayIdx) => {
+              const originalUserAnswerOptIdx = attempt.userAnswers[q.originalIdx];
+              // map the original user answer option index back to the display index
+              const displayUserAnswerOptIdx = q.optMap.indexOf(originalUserAnswerOptIdx);
+              const isCorrect = originalUserAnswerOptIdx === quiz.questions[q.originalIdx].correctIndex;
               const letters = ['A', 'B', 'C', 'D'];
 
               return (
                 <div
-                  key={idx}
-                  id={`review-card-${idx}`}
+                  key={q.mappedDisplayIdx}
+                  id={`review-card-${q.mappedDisplayIdx}`}
                   className={`glass-card border rounded-3xl p-6 sm:p-8 shadow-sm transition-all duration-300 print:border-slate-300 print:shadow-none ${
                     isCorrect
                       ? 'border-slate-200/40 dark:border-white/5 bg-white/10 dark:bg-[#0f172a]/20'
@@ -221,7 +249,7 @@ export default function ResultsView({ quiz, attempt, onRetake, onSelectReference
                   <div className="flex flex-wrap items-start justify-between gap-4 mb-5">
                     <div className="flex items-center gap-3">
                       <span className="w-8 h-8 rounded-xl bg-slate-300/50 dark:bg-white/10 text-slate-800 dark:text-slate-200 font-extrabold text-sm flex items-center justify-center">
-                        {idx + 1}
+                        {q.mappedDisplayIdx + 1}
                       </span>
                       {isCorrect ? (
                         <span className="inline-flex items-center gap-1 text-xs font-bold text-emerald-600 dark:text-emerald-400 bg-emerald-500/10 px-2.5 py-1 rounded-full border border-emerald-500/20">
@@ -233,11 +261,10 @@ export default function ResultsView({ quiz, attempt, onRetake, onSelectReference
                         </span>
                       )}
                     </div>
-
                     {/* PDF locator */}
                     {q.pageNumber && (
                       <button
-                        id={`locate-page-btn-${idx}`}
+                        id={`locate-page-btn-${q.mappedDisplayIdx}`}
                         onClick={() => onSelectReference(q.pageNumber, q.sourceExcerpt)}
                         className="text-xs text-indigo-600 hover:text-indigo-800 dark:text-indigo-400 dark:hover:text-indigo-300 font-bold bg-indigo-500/10 px-3 py-1.5 rounded-xl border border-indigo-500/20 flex items-center gap-1.5 transition-colors print:hidden font-display"
                       >
@@ -260,7 +287,7 @@ export default function ResultsView({ quiz, attempt, onRetake, onSelectReference
                   {/* Options output */}
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mb-6">
                     {q.options.map((opt, oIdx) => {
-                      const isOptionSelected = userAnswer === oIdx;
+                      const isOptionSelected = displayUserAnswerOptIdx === oIdx;
                       const isOptionCorrect = q.correctIndex === oIdx;
                       
                       let optionStyle = 'border-slate-200/40 dark:border-white/5 bg-white/10 dark:bg-[#0f172a]/20';

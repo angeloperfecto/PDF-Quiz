@@ -4,7 +4,7 @@ import { Question } from '../types';
 
 interface QuizViewProps {
   questions: Question[];
-  onQuizSubmit: (userAnswers: number[], elapsedSeconds: number) => void;
+  onQuizSubmit: (userAnswers: number[], elapsedSeconds: number, questionMap?: number[], optionMaps?: number[][]) => void;
   onSelectReference: (pageNumber?: number, textExcerpt?: string) => void;
 }
 
@@ -131,7 +131,7 @@ export default function QuizView({ questions, onQuizSubmit, onSelectReference }:
       }
     }
 
-    onQuizSubmit(mappedUserAnswers, elapsedSeconds);
+    onQuizSubmit(mappedUserAnswers, elapsedSeconds, questionMap, optionMaps);
   };
 
   if (!hasStarted) {

@@ -17,6 +17,8 @@ export interface QuizAttempt {
   percentage: number;
   elapsedSeconds: number;
   userAnswers: number[]; // Index of answer chosen for each question
+  questionMap?: number[];
+  optionMaps?: string[];
 }
 
 export interface Quiz {
