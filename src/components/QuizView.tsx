@@ -9,20 +9,74 @@ interface QuizViewProps {
 }
 
 export default function QuizView({ questions, onQuizSubmit, onSelectReference }: QuizViewProps) {
+  const [hasStarted, setHasStarted] = useState<boolean>(false);
+  const [randomize, setRandomize] = useState<boolean>(false);
+
+  const [shuffledQuestions, setShuffledQuestions] = useState<Question[]>([]);
+  const [questionMap, setQuestionMap] = useState<number[]>([]);
+  const [optionMaps, setOptionMaps] = useState<number[][]>([]);
+
   const [currentIdx, setCurrentIdx] = useState<number>(0);
-  const [selectedAnswers, setSelectedAnswers] = useState<number[]>(new Array(questions.length).fill(-1));
+  const [selectedAnswers, setSelectedAnswers] = useState<number[]>([]);
   const [elapsedSeconds, setElapsedSeconds] = useState<number>(0);
   const [timerEnabled, setTimerEnabled] = useState<boolean>(true);
   const [instantFeedback, setInstantFeedback] = useState<boolean>(false);
 
+  // Reset when questions change
+  useEffect(() => {
+    setHasStarted(false);
+    setRandomize(false);
+    setCurrentIdx(0);
+    setElapsedSeconds(0);
+    setSelectedAnswers([]);
+  }, [questions]);
+
   // Set up Timer
   useEffect(() => {
-    if (!timerEnabled) return;
+    if (!timerEnabled || !hasStarted) return;
     const interval = setInterval(() => {
       setElapsedSeconds(prev => prev + 1);
     }, 1000);
     return () => clearInterval(interval);
-  }, [timerEnabled]);
+  }, [timerEnabled, hasStarted]);
+
+  const handleStart = () => {
+    let newShuffledQuestions: Question[] = [];
+    let newQuestionMap: number[] = [];
+    let newOptionMaps: number[][] = [];
+
+    if (randomize) {
+      let indices = questions.map((_, i) => i);
+      indices = indices.sort(() => Math.random() - 0.5);
+      newQuestionMap = indices;
+      
+      newShuffledQuestions = indices.map((originalIdx) => {
+        const q = questions[originalIdx];
+        let optIndices = q.options.map((_, i) => i);
+        optIndices = optIndices.sort(() => Math.random() - 0.5);
+        newOptionMaps.push(optIndices);
+
+        const shuffledOptions = optIndices.map(i => q.options[i]);
+        const newCorrectIndex = optIndices.indexOf(q.correctIndex);
+
+        return {
+          ...q,
+          options: shuffledOptions,
+          correctIndex: newCorrectIndex
+        };
+      });
+    } else {
+      newShuffledQuestions = [...questions];
+      newQuestionMap = questions.map((_, i) => i);
+      newOptionMaps = questions.map(q => q.options.map((_, i) => i));
+    }
+
+    setShuffledQuestions(newShuffledQuestions);
+    setQuestionMap(newQuestionMap);
+    setOptionMaps(newOptionMaps);
+    setSelectedAnswers(new Array(questions.length).fill(-1));
+    setHasStarted(true);
+  };
 
   const handleSelectOption = (optionIdx: number) => {
     const newAnswers = [...selectedAnswers];
@@ -30,17 +84,17 @@ export default function QuizView({ questions, onQuizSubmit, onSelectReference }:
     setSelectedAnswers(newAnswers);
 
     // Auto update PDF viewer reference in the side-by-side mode if question has source page
-    const currentQuestion = questions[currentIdx];
+    const currentQuestion = shuffledQuestions[currentIdx];
     if (currentQuestion.pageNumber || currentQuestion.sourceExcerpt) {
       onSelectReference(currentQuestion.pageNumber, currentQuestion.sourceExcerpt);
     }
   };
 
   const handleNext = () => {
-    if (currentIdx < questions.length - 1) {
+    if (currentIdx < shuffledQuestions.length - 1) {
       const nextIdx = currentIdx + 1;
       setCurrentIdx(nextIdx);
-      const nextQuestion = questions[nextIdx];
+      const nextQuestion = shuffledQuestions[nextIdx];
       if (nextQuestion.pageNumber || nextQuestion.sourceExcerpt) {
         onSelectReference(nextQuestion.pageNumber, nextQuestion.sourceExcerpt);
       }
@@ -51,7 +105,7 @@ export default function QuizView({ questions, onQuizSubmit, onSelectReference }:
     if (currentIdx > 0) {
       const prevIdx = currentIdx - 1;
       setCurrentIdx(prevIdx);
-      const prevQuestion = questions[prevIdx];
+      const prevQuestion = shuffledQuestions[prevIdx];
       if (prevQuestion.pageNumber || prevQuestion.sourceExcerpt) {
         onSelectReference(prevQuestion.pageNumber, prevQuestion.sourceExcerpt);
       }
@@ -64,7 +118,64 @@ export default function QuizView({ questions, onQuizSubmit, onSelectReference }:
     return `${m}:${s}`;
   };
 
-  const allAnswered = selectedAnswers.every(ans => ans !== -1);
+  const handleSubmit = () => {
+    const mappedUserAnswers = new Array(questions.length).fill(-1);
+
+    for (let k = 0; k < shuffledQuestions.length; k++) {
+      const originalQuestionIdx = questionMap[k];
+      const selectedShuffledOptIdx = selectedAnswers[k];
+      
+      if (selectedShuffledOptIdx !== -1) {
+        const originalOptIdx = optionMaps[k][selectedShuffledOptIdx];
+        mappedUserAnswers[originalQuestionIdx] = originalOptIdx;
+      }
+    }
+
+    onQuizSubmit(mappedUserAnswers, elapsedSeconds);
+  };
+
+  if (!hasStarted) {
+    return (
+      <div className="glass-card border border-slate-200/50 dark:border-white/10 rounded-3xl p-6 sm:p-8 shadow-xl shadow-slate-100/10 dark:shadow-none flex flex-col items-center justify-center h-full text-center">
+        <div className="w-16 h-16 bg-indigo-500/10 dark:bg-indigo-500/20 text-indigo-600 dark:text-indigo-400 rounded-full flex items-center justify-center mb-6">
+          <HelpCircle className="w-8 h-8" />
+        </div>
+        <h2 className="text-2xl font-extrabold text-slate-800 dark:text-slate-100 font-display mb-2">Ready to Start?</h2>
+        <p className="text-slate-600 dark:text-slate-400 max-w-sm mb-8 text-sm leading-relaxed">
+          You are about to begin a {questions.length}-question quiz. Make sure you are ready to focus.
+        </p>
+        
+        <div className="bg-slate-50 dark:bg-slate-900/50 border border-slate-200 dark:border-white/10 p-5 rounded-2xl w-full max-w-sm mb-8">
+          <label className="flex items-start gap-3 cursor-pointer group">
+            <div className="relative flex items-center justify-center mt-0.5">
+              <input
+                type="checkbox"
+                checked={randomize}
+                onChange={(e) => setRandomize(e.target.checked)}
+                className="w-5 h-5 appearance-none border-2 border-slate-300 dark:border-slate-600 rounded-lg checked:border-indigo-600 dark:checked:border-indigo-400 checked:bg-indigo-600 dark:checked:bg-indigo-400 transition-colors cursor-pointer peer"
+              />
+              <CheckCircle className="w-3.5 h-3.5 text-white absolute pointer-events-none opacity-0 peer-checked:opacity-100 transition-opacity" />
+            </div>
+            <div className="text-left flex-1">
+              <p className="text-sm font-bold text-slate-800 dark:text-slate-200">Randomize Questions & Choices</p>
+              <p className="text-xs text-slate-500 dark:text-slate-400 mt-1 leading-relaxed group-hover:text-slate-600 dark:group-hover:text-slate-300 transition-colors">
+                Shuffle the order of questions and all answer options to ensure a fresh experience.
+              </p>
+            </div>
+          </label>
+        </div>
+
+        <button
+          onClick={handleStart}
+          className="px-8 py-3.5 bg-indigo-600 hover:bg-indigo-500 text-white rounded-xl font-bold flex items-center gap-2 transition-all shadow-md active:scale-95"
+        >
+          <Timer className="w-5 h-5" /> Start Quiz Now
+        </button>
+      </div>
+    );
+  }
+
+  const allAnswered = selectedAnswers.length > 0 && selectedAnswers.every(ans => ans !== -1);
   const totalAnsweredCount = selectedAnswers.filter(ans => ans !== -1).length;
 
   return (
@@ -121,39 +232,39 @@ export default function QuizView({ questions, onQuizSubmit, onSelectReference }:
       <div className="flex-1 overflow-y-auto space-y-6 pr-1" id="quiz-question-container">
         <div className="space-y-4">
           <div className="flex flex-wrap gap-2">
-            {questions[currentIdx].pageNumber && (
+            {shuffledQuestions[currentIdx].pageNumber && (
               <span className="inline-flex items-center gap-1 text-[11px] font-bold text-indigo-600 dark:text-indigo-400 bg-indigo-500/10 dark:bg-indigo-950/30 px-2.5 py-1 rounded-md border border-indigo-500/20">
-                <Clock className="w-3 h-3" /> Grounded on Page {questions[currentIdx].pageNumber}
+                <Clock className="w-3 h-3" /> Grounded on Page {shuffledQuestions[currentIdx].pageNumber}
               </span>
             )}
-            {questions[currentIdx].difficulty && (
+            {shuffledQuestions[currentIdx].difficulty && (
               <span className={`inline-flex items-center gap-1 text-[11px] font-bold px-2.5 py-1 rounded-md border ${
-                questions[currentIdx].difficulty === 'Hard' ? 'text-rose-600 dark:text-rose-400 bg-rose-500/10 border-rose-500/20' :
-                questions[currentIdx].difficulty === 'Medium' ? 'text-amber-600 dark:text-amber-400 bg-amber-500/10 border-amber-500/20' :
+                shuffledQuestions[currentIdx].difficulty === 'Hard' ? 'text-rose-600 dark:text-rose-400 bg-rose-500/10 border-rose-500/20' :
+                shuffledQuestions[currentIdx].difficulty === 'Medium' ? 'text-amber-600 dark:text-amber-400 bg-amber-500/10 border-amber-500/20' :
                 'text-emerald-600 dark:text-emerald-400 bg-emerald-500/10 border-emerald-500/20'
               }`}>
-                {questions[currentIdx].difficulty}
+                {shuffledQuestions[currentIdx].difficulty}
               </span>
             )}
           </div>
           
-          {questions[currentIdx].imageAttachment && (
+          {shuffledQuestions[currentIdx].imageAttachment && (
             <div className="rounded-xl overflow-hidden border border-slate-200 dark:border-white/10 max-w-sm">
-              <img src={questions[currentIdx].imageAttachment} alt="Question Reference" className="w-full h-auto object-contain bg-slate-50 dark:bg-slate-900" />
+              <img src={shuffledQuestions[currentIdx].imageAttachment} alt="Question Reference" className="w-full h-auto object-contain bg-slate-50 dark:bg-slate-900" />
             </div>
           )}
 
           <h4 className="text-lg font-bold text-slate-800 dark:text-slate-100 leading-relaxed font-display">
-            {questions[currentIdx].questionText}
+            {shuffledQuestions[currentIdx].questionText}
           </h4>
         </div>
 
         {/* Answer Choices */}
         <div className="space-y-3.5">
-          {questions[currentIdx].options.map((option, optIdx) => {
+          {shuffledQuestions[currentIdx].options.map((option, optIdx) => {
             const letters = ['A', 'B', 'C', 'D'];
             const isSelected = selectedAnswers[currentIdx] === optIdx;
-            const correctIndex = questions[currentIdx].correctIndex;
+            const correctIndex = shuffledQuestions[currentIdx].correctIndex;
             const hasAnswered = selectedAnswers[currentIdx] !== -1;
             const showFeedback = instantFeedback && hasAnswered;
 
@@ -213,13 +324,13 @@ export default function QuizView({ questions, onQuizSubmit, onSelectReference }:
         </div>
 
         {/* Instant Feedback Explanation */}
-        {instantFeedback && selectedAnswers[currentIdx] !== -1 && questions[currentIdx].explanation && (
+        {instantFeedback && selectedAnswers[currentIdx] !== -1 && shuffledQuestions[currentIdx].explanation && (
           <div className="bg-emerald-500/5 dark:bg-emerald-950/15 border border-emerald-500/20 dark:border-emerald-500/10 rounded-2xl p-4 mt-4 animate-fadeIn">
             <h5 className="text-xs font-bold text-emerald-800 dark:text-emerald-400 uppercase tracking-wider mb-1.5 font-display flex items-center gap-1.5">
               <CheckCircle className="w-4 h-4 text-emerald-600 dark:text-emerald-400" /> Explanation
             </h5>
             <p className="text-xs text-slate-700 dark:text-slate-300 leading-relaxed font-medium">
-              {questions[currentIdx].explanation}
+              {shuffledQuestions[currentIdx].explanation}
             </p>
           </div>
         )}
@@ -231,7 +342,7 @@ export default function QuizView({ questions, onQuizSubmit, onSelectReference }:
           Quiz Progress Grid ({totalAnsweredCount} / {questions.length} answered)
         </p>
         <div className="flex flex-wrap gap-2">
-          {questions.map((_, idx) => {
+          {shuffledQuestions.map((_, idx) => {
             const isAnswered = selectedAnswers[idx] !== -1;
             const isCurrent = idx === currentIdx;
             return (
@@ -240,7 +351,7 @@ export default function QuizView({ questions, onQuizSubmit, onSelectReference }:
                 id={`jump-btn-${idx}`}
                 onClick={() => {
                   setCurrentIdx(idx);
-                  const q = questions[idx];
+                  const q = shuffledQuestions[idx];
                   if (q.pageNumber || q.sourceExcerpt) {
                     onSelectReference(q.pageNumber, q.sourceExcerpt);
                   }
