@@ -41,6 +41,7 @@ import QuizView from './components/QuizView';
 import ResultsView from './components/ResultsView';
 import HistoryView from './components/HistoryView';
 import ManualQuizCreator from './components/ManualQuizCreator';
+import CalendarView from './components/CalendarView';
 
 export default function App() {
   const [user, setUser] = useState<any>(null);
@@ -786,24 +787,35 @@ export default function App() {
                       Quiz Panel
                     </span>
                   </div>
-                  <button
-                    id="toggle-quiz-maximize"
-                    onClick={() => setLayoutMode(layoutMode === 'quiz-only' ? 'split' : 'quiz-only')}
-                    className="p-1.5 hover:bg-slate-200 dark:hover:bg-white/5 rounded-xl text-slate-500 hover:text-indigo-600 dark:text-slate-400 dark:hover:text-indigo-400 transition-all flex items-center gap-1.5 text-xs font-semibold"
-                    title={layoutMode === 'quiz-only' ? "Minimize/Split Panel" : "Maximize Panel"}
-                  >
-                    {layoutMode === 'quiz-only' ? (
-                      <>
-                        <Minimize2 className="w-4 h-4" />
-                        <span>Split View</span>
-                      </>
-                    ) : (
-                      <>
-                        <Maximize2 className="w-4 h-4" />
-                        <span>Maximize Quiz</span>
-                      </>
-                    )}
-                  </button>
+                  <div className="flex items-center gap-2">
+                    <button
+                      id="toggle-quiz-maximize"
+                      onClick={() => setLayoutMode(layoutMode === 'quiz-only' ? 'split' : 'quiz-only')}
+                      className="p-1.5 hover:bg-slate-200 dark:hover:bg-white/5 rounded-xl text-slate-500 hover:text-indigo-600 dark:text-slate-400 dark:hover:text-indigo-400 transition-all flex items-center gap-1.5 text-xs font-semibold"
+                      title={layoutMode === 'quiz-only' ? "Minimize/Split Panel" : "Maximize Panel"}
+                    >
+                      {layoutMode === 'quiz-only' ? (
+                        <>
+                          <Minimize2 className="w-4 h-4" />
+                          <span>Split View</span>
+                        </>
+                      ) : (
+                        <>
+                          <Maximize2 className="w-4 h-4" />
+                          <span>Maximize Quiz</span>
+                        </>
+                      )}
+                    </button>
+                    <button
+                      id="toggle-quiz-hide"
+                      onClick={() => setLayoutMode('pdf-only')}
+                      className="p-1.5 hover:bg-slate-200 dark:hover:bg-white/5 rounded-xl text-slate-500 hover:text-red-600 dark:text-slate-400 dark:hover:text-red-400 transition-all flex items-center gap-1.5 text-xs font-semibold"
+                      title="Hide Quiz Panel"
+                    >
+                      <X className="w-4 h-4" />
+                      <span>Hide</span>
+                    </button>
+                  </div>
                 </div>
 
                 <div className="flex-1 overflow-y-auto min-h-0 pr-1">
@@ -849,24 +861,35 @@ export default function App() {
                       PDF Reference Panel
                     </span>
                   </div>
-                  <button
-                    id="toggle-pdf-maximize"
-                    onClick={() => setLayoutMode(layoutMode === 'pdf-only' ? 'split' : 'pdf-only')}
-                    className="p-1.5 hover:bg-slate-200 dark:hover:bg-white/5 rounded-xl text-slate-500 hover:text-indigo-600 dark:text-slate-400 dark:hover:text-indigo-400 transition-all flex items-center gap-1.5 text-xs font-semibold"
-                    title={layoutMode === 'pdf-only' ? "Minimize/Split Panel" : "Maximize Panel"}
-                  >
-                    {layoutMode === 'pdf-only' ? (
-                      <>
-                        <Minimize2 className="w-4 h-4" />
-                        <span>Split View</span>
-                      </>
-                    ) : (
-                      <>
-                        <Maximize2 className="w-4 h-4" />
-                        <span>Maximize PDF</span>
-                      </>
-                    )}
-                  </button>
+                  <div className="flex items-center gap-2">
+                    <button
+                      id="toggle-pdf-maximize"
+                      onClick={() => setLayoutMode(layoutMode === 'pdf-only' ? 'split' : 'pdf-only')}
+                      className="p-1.5 hover:bg-slate-200 dark:hover:bg-white/5 rounded-xl text-slate-500 hover:text-indigo-600 dark:text-slate-400 dark:hover:text-indigo-400 transition-all flex items-center gap-1.5 text-xs font-semibold"
+                      title={layoutMode === 'pdf-only' ? "Minimize/Split Panel" : "Maximize Panel"}
+                    >
+                      {layoutMode === 'pdf-only' ? (
+                        <>
+                          <Minimize2 className="w-4 h-4" />
+                          <span>Split View</span>
+                        </>
+                      ) : (
+                        <>
+                          <Maximize2 className="w-4 h-4" />
+                          <span>Maximize PDF</span>
+                        </>
+                      )}
+                    </button>
+                    <button
+                      id="toggle-pdf-hide"
+                      onClick={() => setLayoutMode('quiz-only')}
+                      className="p-1.5 hover:bg-slate-200 dark:hover:bg-white/5 rounded-xl text-slate-500 hover:text-red-600 dark:text-slate-400 dark:hover:text-red-400 transition-all flex items-center gap-1.5 text-xs font-semibold"
+                      title="Hide PDF Panel"
+                    >
+                      <X className="w-4 h-4" />
+                      <span>Hide</span>
+                    </button>
+                  </div>
                 </div>
 
                 {activeFile ? (
@@ -940,6 +963,30 @@ export default function App() {
                   onEditQuiz={(quiz) => {
                     setManualQuizToEdit(quiz);
                     setActiveTab('manual-quiz');
+                  }}
+                />
+              </div>
+            </div>
+          )}
+
+          {/* Tab 4: Study Calendar */}
+          {activeTab === 'calendar' && (
+            <div className="h-full overflow-y-auto px-6 py-8">
+              <div className="max-w-[1400px] mx-auto h-full">
+                <CalendarView
+                  user={user}
+                  quizzes={quizzes}
+                  studyEvents={studyEvents}
+                  onRefreshEvents={refreshStudyEvents}
+                  onStartQuiz={(quiz) => {
+                    setCurrentQuiz(quiz);
+                    setCurrentAttempt(null);
+                    setActiveTab('active-study');
+                    setMobileSplit('study');
+                    setLayoutMode(quiz.isManual ? 'quiz-only' : 'split');
+                  }}
+                  onViewPDF={(file) => {
+                    // Logic to view PDF if needed
                   }}
                 />
               </div>
