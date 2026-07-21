@@ -385,7 +385,7 @@ export default function QuizView({ questions, onQuizSubmit, onSelectReference }:
         {currentIdx === questions.length - 1 ? (
           <button
             id="submit-quiz-btn"
-            onClick={() => onQuizSubmit(selectedAnswers, elapsedSeconds)}
+            onClick={handleSubmit}
             className={`px-6 py-3 rounded-xl font-semibold text-white flex items-center gap-2 shadow-lg transition-all duration-200 ${
               allAnswered
                 ? 'bg-gradient-to-r from-green-600 to-emerald-600 hover:from-green-500 hover:to-emerald-500 shadow-green-100 dark:shadow-none hover:scale-[1.02]'
