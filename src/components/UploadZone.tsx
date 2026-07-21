@@ -414,7 +414,7 @@ export default function UploadZone({ onQuizGenerated, isLoading, setIsLoading }:
                     <label className="block text-sm font-semibold text-slate-700 dark:text-slate-300 mb-3">
                       Difficulty Level
                     </label>
-                    <div className="grid grid-cols-4 gap-2">
+                    <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
                       {(['Easy', 'Medium', 'Hard', 'Mixed'] as const).map((level) => (
                         <button
                           key={level}
@@ -439,13 +439,13 @@ export default function UploadZone({ onQuizGenerated, isLoading, setIsLoading }:
                     <label className="block text-sm font-semibold text-slate-700 dark:text-slate-300 mb-3">
                       Question Type
                     </label>
-                    <div className="grid grid-cols-3 gap-2">
+                    <div className="flex flex-wrap gap-2">
                       {(['Multiple Choice', 'True/False', 'Definition', 'Identification', 'Mixed'] as const).map((type) => (
                         <button
                           key={type}
                           id={`type-btn-${type}`}
                           onClick={() => setQuestionType(type)}
-                          className={`py-2.5 px-1 rounded-xl font-medium border text-[11px] text-center transition-all duration-200 ${
+                          className={`flex-1 min-w-[100px] py-2.5 px-2 rounded-xl font-medium border text-[11px] text-center transition-all duration-200 ${
                             questionType === type
                               ? 'border-indigo-500/65 bg-indigo-500/10 text-indigo-700 dark:text-indigo-400 dark:border-indigo-550/45 dark:bg-indigo-500/15 font-bold shadow-[0_0_15px_rgba(99,102,241,0.08)]'
                               : 'border-slate-300/60 dark:border-white/5 bg-white/30 dark:bg-white/5 hover:border-slate-400 dark:hover:border-white/10 text-slate-700 dark:text-slate-300'

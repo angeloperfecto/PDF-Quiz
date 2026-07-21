@@ -30,9 +30,10 @@ import {
   saveQuizToFirestore,
   addQuizAttemptToFirestore,
   getUserQuizzesFromFirestore,
-  deleteQuizFromFirestore
+  deleteQuizFromFirestore,
+  subscribeToUserQuizzesFromFirestore
 } from './lib/quizService';
-import { getStudyEventsFromFirestore, deleteStudyEventFromFirestore } from './lib/calendarService';
+import { getStudyEventsFromFirestore, deleteStudyEventFromFirestore, subscribeToStudyEventsFromFirestore } from './lib/calendarService';
 import { Quiz, QuizAttempt, QuizConfig, StudyEvent } from './types';
 import UploadZone from './components/UploadZone';
 import PDFViewer from './components/PDFViewer';
@@ -64,34 +65,26 @@ export default function App() {
   const [mobileSplit, setMobileSplit] = useState<'study' | 'pdf'>('study');
   const [layoutMode, setLayoutMode] = useState<'split' | 'quiz-only' | 'pdf-only'>('split');
 
-  // Initialize Auth & Load User Quizzes
+  // Initialize Auth
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, async (firebaseUser) => {
       try {
         if (firebaseUser) {
           setUser(firebaseUser);
-          const userQuizzes = await getUserQuizzesFromFirestore(firebaseUser.uid);
-          setQuizzes(userQuizzes);
         } else {
           // If not authenticated, attempt anonymous sign in
           try {
             const activeUser = await ensureUserSession();
             if (activeUser) {
               setUser(activeUser);
-              const userQuizzes = await getUserQuizzesFromFirestore(activeUser.uid);
-              setQuizzes(userQuizzes);
             } else {
               const guestUser = { uid: 'guest', isGuest: true, displayName: 'Guest Student' };
               setUser(guestUser);
-              const userQuizzes = await getUserQuizzesFromFirestore('guest');
-              setQuizzes(userQuizzes);
             }
           } catch (anonErr) {
             console.warn('Anonymous session setup error:', anonErr);
             const guestUser = { uid: 'guest', isGuest: true, displayName: 'Guest Student' };
             setUser(guestUser);
-            const userQuizzes = await getUserQuizzesFromFirestore('guest');
-            setQuizzes(userQuizzes);
           }
         }
       } catch (err: any) {
@@ -99,12 +92,6 @@ export default function App() {
         // Fallback to local guest sandbox
         const guestUser = { uid: 'guest', isGuest: true, displayName: 'Guest Student' };
         setUser(guestUser);
-        try {
-          const userQuizzes = await getUserQuizzesFromFirestore('guest');
-          setQuizzes(userQuizzes);
-        } catch (e) {
-          setQuizzes([]);
-        }
       } finally {
         setLoadingSession(false);
       }
@@ -112,6 +99,24 @@ export default function App() {
 
     return () => unsubscribe();
   }, []);
+
+  // Subscribe to realtime updates for quizzes when user changes
+  useEffect(() => {
+    if (!user) return;
+    const unsubscribe = subscribeToUserQuizzesFromFirestore(user.uid, (data) => {
+      setQuizzes(data);
+    });
+    return () => unsubscribe();
+  }, [user]);
+
+  // Subscribe to realtime updates for study events when user changes
+  useEffect(() => {
+    if (!user) return;
+    const unsubscribe = subscribeToStudyEventsFromFirestore(user.uid, (data) => {
+      setStudyEvents(data);
+    });
+    return () => unsubscribe();
+  }, [user]);
 
   // Load study events whenever user changes
   useEffect(() => {
@@ -144,8 +149,6 @@ export default function App() {
       const result = await signInWithPopup(auth, googleProvider);
       if (result.user) {
         setUser(result.user);
-        const userQuizzes = await getUserQuizzesFromFirestore(result.user.uid);
-        setQuizzes(userQuizzes);
         setError(null);
       }
     } catch (err: any) {
@@ -159,8 +162,6 @@ export default function App() {
       await signOut(auth);
       const guestUser = { uid: 'guest', isGuest: true, displayName: 'Guest Student' };
       setUser(guestUser);
-      const userQuizzes = await getUserQuizzesFromFirestore('guest');
-      setQuizzes(userQuizzes);
       setCurrentQuiz(null);
       setCurrentAttempt(null);
       setActiveTab('dashboard');

@@ -1,4 +1,4 @@
-import { collection, doc, setDoc, updateDoc, getDocs, query, where, orderBy, arrayUnion, deleteDoc } from 'firebase/firestore';
+import { collection, doc, setDoc, updateDoc, getDocs, query, where, orderBy, arrayUnion, deleteDoc, onSnapshot } from 'firebase/firestore';
 import { db } from './firebase';
 import { Quiz, QuizAttempt } from '../types';
 
@@ -120,4 +120,31 @@ export const deleteQuizFromFirestore = async (quizId: string, userId?: string): 
     console.error('Error deleting quiz from Firestore:', error);
     throw error;
   }
+};
+
+
+export const subscribeToUserQuizzesFromFirestore = (userId: string, callback: (quizzes: Quiz[]) => void): (() => void) => {
+  if (userId === 'guest') {
+    // Guest doesn't have real-time sync across tabs, but we'll simulate an immediate return
+    getUserQuizzesFromFirestore(userId).then(callback);
+    return () => {};
+  }
+
+  const q = query(
+    collection(db, QUIZ_COLLECTION),
+    where('userId', '==', userId),
+    orderBy('uploadDate', 'desc')
+  );
+
+  const unsubscribe = onSnapshot(q, (querySnapshot) => {
+    const quizzes: Quiz[] = [];
+    querySnapshot.forEach((doc) => {
+      quizzes.push(doc.data() as Quiz);
+    });
+    callback(quizzes);
+  }, (error) => {
+    console.error('Error listening to user quizzes from Firestore:', error);
+  });
+
+  return unsubscribe;
 };

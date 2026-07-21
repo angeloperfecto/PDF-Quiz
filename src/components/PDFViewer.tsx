@@ -66,6 +66,19 @@ export default function PDFViewer({ pdfFile, initialPage = 1, highlightText }: P
     }
   }, [initialPage, pdfDoc, totalPages]);
 
+  const [containerWidth, setContainerWidth] = useState<number>(0);
+
+  useEffect(() => {
+    if (!containerRef.current) return;
+    const observer = new ResizeObserver((entries) => {
+      for (let entry of entries) {
+        setContainerWidth(entry.contentRect.width);
+      }
+    });
+    observer.observe(containerRef.current);
+    return () => observer.disconnect();
+  }, []);
+
   // Render the current page on canvas
   useEffect(() => {
     if (!pdfDoc) return;
@@ -83,9 +96,9 @@ export default function PDFViewer({ pdfFile, initialPage = 1, highlightText }: P
         const page = await pdfDoc.getPage(currentPage);
         
         // Match width of parent container for responsive scale
-        const containerWidth = containerRef.current?.clientWidth || 600;
+        const cw = containerWidth || containerRef.current?.clientWidth || 600;
         const unscaledViewport = page.getViewport({ scale: 1.0 });
-        const widthScale = (containerWidth - 32) / unscaledViewport.width;
+        const widthScale = (cw - 32) / unscaledViewport.width;
         
         const viewport = page.getViewport({ scale: widthScale * scale });
         const context = canvas.getContext('2d');
