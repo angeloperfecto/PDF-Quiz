@@ -559,7 +559,7 @@ export default function CalendarView({
   // Google Calendar integration template generator URL
   const getGoogleCalendarUrl = (event: StudyEvent): string => {
     const title = encodeURIComponent(`Study Session: ${event.title}`);
-    const notes = encodeURIComponent(`${event.notes || ''}\n\nSubject: ${event.subject}\nEstimated Time: ${event.estimatedMinutes} mins\nGenerated AI Quiz available in QuizPDF AI app!`);
+    const notes = encodeURIComponent(`${event.notes || ''}\n\nSubject: ${event.subject}\nEstimated Time: ${event.estimatedMinutes} mins\nGenerated AI Quiz available in Quiz Pro PH app!`);
     
     // Format start & end date for Google URL YYYYMMDDTHHMMSSZ
     const datePart = event.date.replace(/-/g, '');

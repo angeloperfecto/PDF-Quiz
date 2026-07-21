@@ -356,7 +356,7 @@ export default function App() {
                 <BookOpen className="w-5 h-5" />
               </div>
               <span className="font-extrabold text-base tracking-tight font-display bg-gradient-to-r from-slate-900 to-indigo-950 dark:from-slate-50 dark:to-slate-300 bg-clip-text text-transparent">
-                QuizPDF AI
+                Quiz Pro PH
               </span>
             </div>
             <button
