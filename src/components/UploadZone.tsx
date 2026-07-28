@@ -120,7 +120,7 @@ export default function UploadZone({ onQuizGenerated, isLoading, setIsLoading }:
       let pdfBase64: string | undefined = undefined;
 
       // Read PDF file as Base64 for improved Gemini analysis
-      if (useAllPages && file.size <= 25 * 1024 * 1024) { // Only if using all pages and under 25MB
+      if (file.size <= 25 * 1024 * 1024) { // Only if under 25MB
         try {
           setProgressStep('Encoding document for deep AI analysis...');
           pdfBase64 = await new Promise<string>((resolve, reject) => {

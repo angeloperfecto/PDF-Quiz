@@ -213,7 +213,7 @@ async function generateQuizWithFallback(
   userPrompt: any,
   systemInstruction: string
 ) {
-  const models = ['gemini-3.1-pro-preview', 'gemini-3.5-flash', 'gemini-3.1-flash-lite'];
+  const models = ['gemini-3.5-flash', 'gemini-3.1-pro-preview', 'gemini-3.1-flash-lite'];
   let lastError: any = null;
 
   for (const model of models) {
@@ -294,6 +294,42 @@ async function generateQuizWithFallback(
   throw lastError || new Error('All models in fallback pool failed to generate a response.');
 }
 
+function parseTextIntoPages(text: string): { pageNum: number; content: string }[] {
+  const pages: { pageNum: number; content: string }[] = [];
+  const regex = /--- PAGE (\d+) ---/g;
+  
+  let match;
+  const matches: { index: number; pageNum: number; header: string }[] = [];
+  
+  while ((match = regex.exec(text)) !== null) {
+    matches.push({
+      index: match.index,
+      pageNum: parseInt(match[1], 10),
+      header: match[0]
+    });
+  }
+  
+  if (matches.length === 0) {
+    return [{ pageNum: 1, content: text }];
+  }
+  
+  for (let i = 0; i < matches.length; i++) {
+    const currentMatch = matches[i];
+    const nextMatch = matches[i + 1];
+    
+    const startIdx = currentMatch.index + currentMatch.header.length;
+    const endIdx = nextMatch ? nextMatch.index : text.length;
+    
+    const pageContent = text.substring(startIdx, endIdx).trim();
+    pages.push({
+      pageNum: currentMatch.pageNum,
+      content: pageContent
+    });
+  }
+  
+  return pages;
+}
+
 const app = express();
 const PORT = 3000;
 
@@ -344,16 +380,16 @@ CRITICAL MANDATES FOR PRE-EXISTING QUESTIONS IN THE PDF:
    - Extract all answer choices exactly as they appear in the PDF (e.g., A, B, C, D, E) including multi-line answer choices.
    - If the original question has fewer or more than 4 options, map it faithfully into a 4-option structure (A, B, C, D) without losing the original meaning. The correct answer must be one of the options.
 4. RECOVERY OF ANSWERS: Correctly identify the "correctIndex" (0 to 3) by matching the correct answer against any answer key provided, or by logical analysis.
-5. COMPLETE INTEGRATION: Scan and extract ALL pre-existing questions found in the PDF.
-6. COMPREHENSIVE QUIZ GENERATION SUPPLEMENT: If the PDF contains NO pre-existing questions, OR if it contains only a small number of pre-existing questions (fewer than 10 questions, such as only 1 or 2 word problems), you MUST supplement the quiz by generating additional, high-quality, relevant multiple-choice questions of similar style, difficulty, and subject matter based on the content of the PDF to make a comprehensive, robust quiz. When "All" is selected, generate a rich and full set of questions (at least 10 to 15 distinct questions, up to 50). Never return only 1 question in total unless the document contains zero information.
+5. NO SUPPLEMENTATION WHEN PRE-EXISTING QUESTIONS EXIST: If the document contains ANY pre-existing questions (even if it is only 1 or 2 word problems), your ONLY task is to extract those exact pre-existing questions. DO NOT generate, create, or add any supplementary questions. If there is only 1 pre-existing question, return exactly 1. If there are 15, return exactly 15.
+6. NO MOCK OR BLANK STUBS: Every extracted question must be complete with fully populated questions and options. Never return empty arrays or incomplete data.
 7. IMAGE DETECTION: We have provided the extracted text which may contain "[Image reference: img_id]" placeholders, alongside actual images. If a question refers to an image (e.g. "Based on the figure below"), you MUST set the "imageAttachment" field for that question to the EXACT image ID from the reference.
 
 Rules:
 1. Strict Accuracy: Every question, option, correct index, and explanation must be 100% backed by the provided text or document.
 2. Technical Preservation: Keep all exact numerical values, formulas, dates, names, standard identifiers, units, and symbols perfectly intact.
 3. Structured JSON Schema: Return a valid JSON object with the following properties:
-   - "totalQuestionsInPDF": integer (The EXACT count of pre-existing questions found in the document, or 0 if generating new questions. YOU MUST ACCURATELY COUNT THEM FIRST).
-   - "validationMessage": string (A detailed message confirming extraction success or indicating which pages/questions failed or are unclear).
+   - "totalQuestionsInPDF": integer (The TRUE EXACT count of pre-existing questions found in the document. Set to 0 if generating brand-new questions from scratch because the document is purely informational with zero pre-existing questions).
+   - "validationMessage": string (MANDATORY. Provide a detailed, step-by-step audit of the scanning. List every question number found, and describe exactly what was extracted, or any pages where content was scanned but couldn't be parsed).
    - "questions": array of objects where each element contains:
      - "questionText": string (the exact original question text and numbering).
      - "options": array of exactly 4 strings.
@@ -370,13 +406,12 @@ If pre-existing questions are found, you MUST extract ALL of them, preserving th
 
 CRITICAL SYSTEM WARNING: Previous extractions failed because the AI lazily extracted only 1 question when dozens were present in the PDF. You are being strictly monitored. If you return only 1 question for a document containing multiple questions, you have catastrophically failed your primary directive. YOU MUST EXTRACT EVERY SINGLE QUESTION. Do NOT be lazy.
 
-SUPPLEMENTATION RULE: If there are fewer than 10 pre-existing questions in the text, you MUST extract them AND generate additional similar/related multiple-choice questions based on the concepts, topics, or formulas in the text so that the final quiz has at least 10 high-quality, distinct questions (up to 50 if 'All' is requested).
+EXTRACTION RULE: If pre-existing questions are found (even if there are only 1 or 2 word problems), you MUST extract ONLY these pre-existing questions. DO NOT generate any supplementary questions. Set \`totalQuestionsInPDF\` to their exact count, and the length of your \`questions\` array must equal \`totalQuestionsInPDF\`.
 
-If there are NO pre-existing questions in the text, then you MUST generate ${targetCountPhrase} brand new high-quality multiple-choice questions of difficulty "${difficulty}" and type "${questionType}" based on the informational content. Make sure to generate a rich, complete set of questions.
+GENERATION RULE: Only if there are absolutely NO pre-existing questions in the text, then you MUST generate ${targetCountPhrase} brand new high-quality multiple-choice questions of difficulty "${difficulty}" and type "${questionType}" based on the informational content. In this case, set \`totalQuestionsInPDF\` to 0. When 'All' is requested, generate a rich, complete set of questions (at least 15 to 25 distinct questions, up to 50). Never return only 1 question when generating new questions unless the text is completely blank.
 
 IMPORTANT LOGIC RULE:
-- If pre-existing questions exist and there are 10 or more, your \`totalQuestionsInPDF\` MUST be their exact count, and the length of your \`questions\` array must equal \`totalQuestionsInPDF\`.
-- If pre-existing questions exist but there are fewer than 10 of them (e.g., only 1 or 2), your \`totalQuestionsInPDF\` MUST be their exact count, and you MUST generate additional similar/related questions so that the length of your \`questions\` array is at least 10 (or up to 50 if 'All' is requested).
+- If pre-existing questions exist, your \`totalQuestionsInPDF\` MUST be their exact count, and you MUST extract ALL of them with no additions. The length of your \`questions\` array must equal \`totalQuestionsInPDF\`.
 - If NO pre-existing questions exist, your \`totalQuestionsInPDF\` MUST be 0, and you MUST generate ${targetCountPhrase}. The length of your \`questions\` array must equal the number of generated questions.
 
 Adhere strictly to the system instruction. Generate a valid JSON object matching the schema.`;
@@ -386,85 +421,256 @@ Adhere strictly to the system instruction. Generate a valid JSON object matching
     let success = false;
     let finalResponseText = '';
 
-    const strategies = [];
-    if (text && text.trim().length > 0) {
-      let promptPayload: any = `${promptInstructions}\n\n--- BEGIN SOURCE TEXT ---\n${text}\n--- END SOURCE TEXT ---`;
-      
-      if (images && images.length > 0) {
-        promptPayload = [ { text: promptPayload } ];
-        for (const img of images) {
-           if (img.dataUrl && img.dataUrl.includes('base64,')) {
-             const [prefix, b64] = img.dataUrl.split('base64,');
-             const mimeType = prefix.replace('data:', '').replace(';', '');
-             promptPayload.push({ text: `[Image reference: ${img.id}]` });
-             promptPayload.push({ inlineData: { mimeType, data: b64 } });
-           }
-        }
-      }
-      
-      strategies.push({
-        type: 'text',
-        prompt: promptPayload
-      });
+    let rangeInstruction = '';
+    if (config?.allPages === false && config?.pageRangeStart && config?.pageRangeEnd) {
+      rangeInstruction = `\n\nPAGE RANGE RULE: Only scan, extract, and analyze content within pages ${config.pageRangeStart} to ${config.pageRangeEnd} of the document. Completely ignore and discard any content on pages outside of this range.`;
     }
-    if (pdfBase64) {
-      strategies.push({
-        type: 'pdf',
-        prompt: [
-          { inlineData: { mimeType: 'application/pdf', data: pdfBase64 } },
-          promptInstructions
-        ]
-      });
+    const finalPrompt = promptInstructions + rangeInstruction;
+
+    // 1. Detection Step to see if there are pre-existing questions in the PDF
+    let hasPreExisting = true; // Default to true for maximum safety
+    let detectedCount = 0;
+    
+    if (text && text.trim().length > 0) {
+      try {
+        console.log('[PDF Parser] Scanning document to detect pre-existing questions...');
+        const detectSystemInstruction = `You are an expert document analyzer. Your task is to detect if there are any pre-existing multiple-choice questions, worksheets, quizzes, or exam problems written inside the provided text.
+Respond with a raw JSON object and nothing else. Do not use markdown blocks, backticks, or other formatting.`;
+
+        const detectPrompt = `Analyze the document text below. Determine if the text contains any pre-existing multiple-choice questions, exam problems, worksheets, or quizzes.
+Respond with a JSON object matching this exact schema:
+{
+  "hasPreExisting": boolean,
+  "totalQuestions": number // The EXACT count of pre-existing questions found in the document
+}
+
+--- DOCUMENT TEXT ---
+${text.substring(0, 500000)}`;
+
+        const detectResponse = await generateQuizWithFallback(ai, detectPrompt, detectSystemInstruction);
+        const detectText = (detectResponse.text || '').replace(/```json/g, '').replace(/```/g, '').trim();
+        const parsedDetect = JSON.parse(detectText);
+        hasPreExisting = !!parsedDetect.hasPreExisting;
+        detectedCount = Number(parsedDetect.totalQuestions) || 0;
+        console.log(`[PDF Parser] Detection result: hasPreExisting = ${hasPreExisting}, detectedCount = ${detectedCount}`);
+      } catch (detectErr) {
+        console.warn('[PDF Parser] Failed to detect pre-existing questions, assuming true for safety:', detectErr);
+      }
     }
 
-    for (let i = 0; i < strategies.length; i++) {
-      const strategy = strategies[i];
-      console.log(`Trying extraction strategy: ${strategy.type}`);
-      let strategySuccess = false;
-      for (let attempt = 1; attempt <= 2; attempt++) {
-        try {
-          const response = await generateQuizWithFallback(ai, strategy.prompt, systemInstruction);
-          const responseText = response.text;
+    // 2. If pre-existing questions are present, perform Parallel Chunked Extraction
+    if (hasPreExisting && text && text.trim().length > 0) {
+      try {
+        const pages = parseTextIntoPages(text);
+        const totalPages = pages.length;
+
+        // Dynamic chunk sizing to balance speed, rate limits, and output token safety
+        let chunkSize = 3;
+        if (totalPages > 30) {
+          chunkSize = 5;
+        } else if (totalPages > 15) {
+          chunkSize = 4;
+        }
+
+        const pageChunks: { pageNum: number; content: string }[][] = [];
+        for (let i = 0; i < pages.length; i += chunkSize) {
+          pageChunks.push(pages.slice(i, i + chunkSize));
+        }
+
+        console.log(`[PDF Parser] Initializing Parallel Chunked Extraction. Total pages: ${totalPages}, chunk size: ${chunkSize}, total chunks: ${pageChunks.length}`);
+
+        const chunkPromises = pageChunks.map(async (chunk, index) => {
+          const chunkText = chunk.map(p => `--- PAGE ${p.pageNum} ---\n${p.content}`).join('\n\n');
+          // Filter images relevant to this specific page chunk to keep context clean
+          const chunkImages = images ? images.filter((img: any) => chunkText.includes(img.id)) : [];
           
-          if (!responseText) continue;
+          const chunkPromptInstructions = `Your absolute, most critical directive is to scan the provided text from pages ${chunk[0].pageNum} to ${chunk[chunk.length - 1].pageNum} for any pre-existing questions, worksheets, quizzes, or exams.
+You MUST extract ALL pre-existing questions found on these pages with 100% complete coverage and zero omissions. DO NOT SUMMARIZE. DO NOT SKIP QUESTIONS. DO NOT STOP EARLY.
+Convert them to standard 4-option multiple choice structure where necessary.
+
+Set \`totalQuestionsInPDF\` to the exact count of pre-existing questions found in this specific chunk.
+Set the \`questions\` array to contain all the extracted questions from this chunk.
+
+If there are NO pre-existing questions on these pages, return an empty array for \`questions\` and set \`totalQuestionsInPDF\` to 0.`;
+
+          let promptPayload: any = `${chunkPromptInstructions}\n\n--- BEGIN SOURCE TEXT FOR PAGES ${chunk[0].pageNum}-${chunk[chunk.length - 1].pageNum} ---\n${chunkText}\n--- END SOURCE TEXT ---`;
           
-          finalResponseText = responseText;
-          const currentParsedData = parseQuizQuestions(responseText);
-          const currentQuestions = currentParsedData.questions;
-          
-          if (currentQuestions && currentQuestions.length > 0) {
-            console.log(`Attempt ${attempt}: Model extracted ${currentQuestions.length} questions. totalQuestionsInPDF reported by model: ${currentParsedData.totalQuestionsInPDF || 0}`);
-            const totalInPdf = currentParsedData.totalQuestionsInPDF || 0;
-            
-            if (totalInPdf > 0 && currentQuestions.length < totalInPdf) {
-               console.log(`Validation failed for strategy ${strategy.type}: Found ${totalInPdf} questions but extracted ${currentQuestions.length}. Retrying.`);
-               if (!parsedData || currentQuestions.length > quizQuestions.length) {
-                 parsedData = currentParsedData;
-                 quizQuestions = currentQuestions;
-               }
-               continue; // retry
-            } else if (totalInPdf === 0 && !isAll && currentQuestions.length < numQuestionsVal && numQuestionsVal > 1 && attempt < 2) {
-               console.log(`Validation failed: Model generated only ${currentQuestions.length} questions when ${numQuestionsVal} were requested. Retrying.`);
-               if (!parsedData || currentQuestions.length > quizQuestions.length) {
-                 parsedData = currentParsedData;
-                 quizQuestions = currentQuestions;
-               }
-               continue; // retry
-            } else {
-               // Validation passed!
-               strategySuccess = true;
-               parsedData = currentParsedData;
-               quizQuestions = currentQuestions;
-               break;
+          if (chunkImages.length > 0) {
+            promptPayload = [ { text: promptPayload } ];
+            for (const img of chunkImages) {
+              if (img.dataUrl && img.dataUrl.includes('base64,')) {
+                const [prefix, b64] = img.dataUrl.split('base64,');
+                const mimeType = prefix.replace('data:', '').replace(';', '');
+                promptPayload.push({ text: `[Image reference: ${img.id}]` });
+                promptPayload.push({ inlineData: { mimeType, data: b64 } });
+              }
             }
           }
-        } catch (err) {
-          console.error(`Strategy ${strategy.type} attempt ${attempt} failed:`, err);
+
+          let chunkParsedData: any = null;
+          let chunkSuccess = false;
+
+          for (let attempt = 1; attempt <= 2; attempt++) {
+            try {
+              console.log(`[PDF Parser] [Chunk ${index + 1}/${pageChunks.length}] Extracting pages ${chunk[0].pageNum}-${chunk[chunk.length - 1].pageNum} (Attempt ${attempt})...`);
+              const response = await generateQuizWithFallback(ai, promptPayload, systemInstruction);
+              const responseText = response.text;
+              if (!responseText) continue;
+
+              const parsed = parseQuizQuestions(responseText);
+              if (parsed && Array.isArray(parsed.questions)) {
+                chunkParsedData = parsed;
+                chunkSuccess = true;
+                console.log(`[PDF Parser] [Chunk ${index + 1}/${pageChunks.length}] Successfully extracted ${parsed.questions.length} questions.`);
+                break;
+              }
+            } catch (err) {
+              console.error(`[PDF Parser] [Chunk ${index + 1}/${pageChunks.length}] Attempt ${attempt} failed:`, err);
+            }
+          }
+
+          return {
+            index,
+            success: chunkSuccess,
+            parsedData: chunkParsedData,
+            pages: chunk.map(p => p.pageNum)
+          };
+        });
+
+        const chunkResults = await Promise.all(chunkPromises);
+
+        let mergedQuestions: any[] = [];
+        let totalQuestionsInPDFSum = 0;
+        let validationMessages: string[] = [];
+
+        for (const result of chunkResults) {
+          if (result.success && result.parsedData) {
+            const chunkQuestions = result.parsedData.questions || [];
+            mergedQuestions.push(...chunkQuestions);
+            totalQuestionsInPDFSum += result.parsedData.totalQuestionsInPDF || chunkQuestions.length;
+            if (result.parsedData.validationMessage) {
+              validationMessages.push(`Pages ${result.pages.join(',')}: ${result.parsedData.validationMessage}`);
+            } else {
+              validationMessages.push(`Pages ${result.pages.join(',')}: Successfully extracted ${chunkQuestions.length} questions.`);
+            }
+          } else {
+            console.error(`[PDF Parser] [Chunk ${result.index + 1}] Failed to extract questions.`);
+            validationMessages.push(`Pages ${result.pages.join(',')}: FAILED to extract questions completely.`);
+          }
         }
+
+        // De-duplicate questions by normalized question text to prevent duplicate questions across chunk boundaries
+        const seenTexts = new Set<string>();
+        const uniqueQuestions: any[] = [];
+        for (const q of mergedQuestions) {
+          const normText = q.questionText.replace(/\s+/g, '').toLowerCase();
+          if (!seenTexts.has(normText)) {
+            seenTexts.add(normText);
+            uniqueQuestions.push(q);
+          } else {
+            console.log(`[PDF Parser] De-duplicated question: "${q.questionText.substring(0, 60)}..."`);
+          }
+        }
+
+        // Set totalExpected to be the highest of detectedCount from first pass or total questions sum or unique questions length.
+        // This makes sure our validation in UploadZone will accurately catch any missing questions!
+        const finalTotalExpected = Math.max(detectedCount, uniqueQuestions.length, totalQuestionsInPDFSum);
+
+        parsedData = {
+          reasoning: `Merged questions from ${chunkResults.length} parallel page chunks.`,
+          totalQuestionsInPDF: finalTotalExpected,
+          validationMessage: validationMessages.join('\n'),
+          questions: uniqueQuestions
+        };
+        quizQuestions = uniqueQuestions;
+        success = true;
+        console.log(`[PDF Parser] Chunked Extraction complete! Successfully extracted ${uniqueQuestions.length} unique questions out of expected ${finalTotalExpected}.`);
+      } catch (chunkErr) {
+        console.error('[PDF Parser] Parallel chunked extraction failed, falling back to standard single-pass strategies:', chunkErr);
       }
-      if (strategySuccess) {
-         success = true;
-         break;
+    }
+
+    // 3. Fallback to standard Single-Pass Strategies if chunking failed, or if no pre-existing questions were detected
+    if (!success) {
+      const strategies = [];
+      if (pdfBase64) {
+        strategies.push({
+          type: 'pdf',
+          prompt: [
+            { inlineData: { mimeType: 'application/pdf', data: pdfBase64 } },
+            finalPrompt
+          ]
+        });
+      }
+      if (text && text.trim().length > 0) {
+        let promptPayload: any = `${finalPrompt}\n\n--- BEGIN SOURCE TEXT ---\n${text}\n--- END SOURCE TEXT ---`;
+        
+        if (images && images.length > 0) {
+          promptPayload = [ { text: promptPayload } ];
+          for (const img of images) {
+             if (img.dataUrl && img.dataUrl.includes('base64,')) {
+               const [prefix, b64] = img.dataUrl.split('base64,');
+               const mimeType = prefix.replace('data:', '').replace(';', '');
+               promptPayload.push({ text: `[Image reference: ${img.id}]` });
+               promptPayload.push({ inlineData: { mimeType, data: b64 } });
+             }
+          }
+        }
+        
+        strategies.push({
+          type: 'text',
+          prompt: promptPayload
+        });
+      }
+
+      for (let i = 0; i < strategies.length; i++) {
+        const strategy = strategies[i];
+        console.log(`[PDF Parser] Trying single-pass extraction strategy: ${strategy.type}`);
+        let strategySuccess = false;
+        for (let attempt = 1; attempt <= 2; attempt++) {
+          try {
+            const response = await generateQuizWithFallback(ai, strategy.prompt, systemInstruction);
+            const responseText = response.text;
+            
+            if (!responseText) continue;
+            
+            finalResponseText = responseText;
+            const currentParsedData = parseQuizQuestions(responseText);
+            const currentQuestions = currentParsedData.questions;
+            
+            if (currentQuestions && currentQuestions.length > 0) {
+              console.log(`[PDF Parser] Attempt ${attempt}: Single-pass extracted ${currentQuestions.length} questions. totalQuestionsInPDF reported: ${currentParsedData.totalQuestionsInPDF || 0}`);
+              const totalInPdf = currentParsedData.totalQuestionsInPDF || 0;
+              
+              if (totalInPdf > 0 && currentQuestions.length < totalInPdf) {
+                 console.log(`[PDF Parser] Validation failed for strategy ${strategy.type}: Found ${totalInPdf} questions but extracted ${currentQuestions.length}. Retrying.`);
+                 if (!parsedData || currentQuestions.length > quizQuestions.length) {
+                   parsedData = currentParsedData;
+                   quizQuestions = currentQuestions;
+                 }
+                 continue; // retry
+              } else if (totalInPdf === 0 && !isAll && currentQuestions.length < numQuestionsVal && numQuestionsVal > 1 && attempt < 2) {
+                 console.log(`[PDF Parser] Validation failed: Model generated only ${currentQuestions.length} questions when ${numQuestionsVal} were requested. Retrying.`);
+                 if (!parsedData || currentQuestions.length > quizQuestions.length) {
+                   parsedData = currentParsedData;
+                   quizQuestions = currentQuestions;
+                 }
+                 continue; // retry
+              } else {
+                 strategySuccess = true;
+                 parsedData = currentParsedData;
+                 quizQuestions = currentQuestions;
+                 break;
+              }
+            }
+          } catch (err) {
+            console.error(`[PDF Parser] Strategy ${strategy.type} attempt ${attempt} failed:`, err);
+          }
+        }
+        if (strategySuccess) {
+           success = true;
+           break;
+        }
       }
     }
 

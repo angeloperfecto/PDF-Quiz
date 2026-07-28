@@ -380,6 +380,21 @@ export default function CalendarView({
     setGenerationPercent(15);
 
     try {
+      let pdfBase64: string | undefined = undefined;
+      if (modalFile.size <= 25 * 1024 * 1024) {
+        try {
+          setGenerationProgress('Encoding document for deep AI analysis...');
+          pdfBase64 = await new Promise<string>((resolve, reject) => {
+            const reader = new FileReader();
+            reader.onload = () => resolve((reader.result as string).split(',')[1]);
+            reader.onerror = reject;
+            reader.readAsDataURL(modalFile);
+          });
+        } catch (e) {
+          console.warn('Failed to encode PDF to base64 in calendar modal', e);
+        }
+      }
+
       let combinedText = '';
       const pagesToProcess = Math.min(modalPdfDoc.numPages, 15); // limit to first 15 pages in modal quick mode
 
@@ -410,6 +425,7 @@ export default function CalendarView({
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           text: combinedText,
+          pdfBase64,
           config
         })
       });
