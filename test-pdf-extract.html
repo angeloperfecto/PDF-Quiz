@@ -1,0 +1,29 @@
+<!DOCTYPE html>
+<html>
+<body>
+<input type="file" id="file" />
+<script type="module">
+import * as pdfjsLib from 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.mjs';
+pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.mjs';
+document.getElementById('file').addEventListener('change', async (e) => {
+    const file = e.target.files[0];
+    const arrayBuffer = await file.arrayBuffer();
+    const pdf = await pdfjsLib.getDocument({data: arrayBuffer}).promise;
+    const page = await pdf.getPage(1);
+    const ops = await page.getOperatorList();
+    console.log("ops length", ops.fnArray.length);
+    for (let i=0; i<ops.fnArray.length; i++) {
+        if (ops.fnArray[i] === pdfjsLib.OPS.paintImageXObject) {
+            console.log("Found image!", ops.argsArray[i][0]);
+            try {
+                const img = await page.objs.get(ops.argsArray[i][0]);
+                console.log("Image extracted:", img.width, img.height);
+            } catch(e) {
+                console.error(e);
+            }
+        }
+    }
+});
+</script>
+</body>
+</html>

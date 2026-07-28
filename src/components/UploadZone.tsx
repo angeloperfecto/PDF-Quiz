@@ -138,9 +138,11 @@ export default function UploadZone({ onQuizGenerated, isLoading, setIsLoading }:
       let currentForceOCR = forceOCR;
       let data: any = null;
       let finalCombinedText = '';
+      let finalExtractedImages: { id: string, dataUrl: string }[] = [];
 
       while (attempt <= 2) {
         combinedText = '';
+        finalExtractedImages = [];
         
         for (let i = start; i <= end; i++) {
           const pageIndex = i - start;
@@ -148,7 +150,7 @@ export default function UploadZone({ onQuizGenerated, isLoading, setIsLoading }:
           setProgressPercent(percent);
           setProgressStep(attempt === 2 
             ? `Retry Attempt 2: Performing deep OCR scan on page ${i} of ${totalPages}...` 
-            : `Extracting text from page ${i} of ${totalPages}...`);
+            : `Extracting text and images from page ${i} of ${totalPages}...`);
 
           const page = await pdfDoc.getPage(i);
           const textContent = await page.getTextContent();
@@ -157,6 +159,57 @@ export default function UploadZone({ onQuizGenerated, isLoading, setIsLoading }:
             .join(' ')
             .replace(/\s+/g, ' ')
             .trim();
+
+          // Extract images from page
+          try {
+            const ops = await page.getOperatorList();
+            for (let j = 0; j < ops.fnArray.length; j++) {
+              const fn = ops.fnArray[j];
+              const OPS = pdfjsLib.OPS as any;
+              if (fn === OPS.paintImageXObject || fn === OPS.paintJpegXObject || fn === OPS.paintImageMaskXObject) {
+                const imgId = ops.argsArray[j][0];
+                try {
+                  const img = await page.objs.get(imgId) as any;
+                  if (img) {
+                    const width = img.width || (img.bitmap && img.bitmap.width);
+                    const height = img.height || (img.bitmap && img.bitmap.height);
+                    
+                    // Filter out very small images (like bullets/icons) or very thin lines
+                    if (width && height && width > 50 && height > 50) {
+                      const canvas = document.createElement('canvas');
+                      canvas.width = width;
+                      canvas.height = height;
+                      const ctx = canvas.getContext('2d');
+                      
+                      let base64 = null;
+                      if (img.data) {
+                        try {
+                          const imgData = new ImageData(new Uint8ClampedArray(img.data), width, height);
+                          ctx?.putImageData(imgData, 0, 0);
+                          base64 = canvas.toDataURL('image/jpeg', 0.8);
+                        } catch (e) {
+                          // Sometimes image data doesn't match dimensions cleanly
+                        }
+                      } else if (img instanceof HTMLImageElement || typeof ImageBitmap !== 'undefined' && img instanceof ImageBitmap || img.bitmap) {
+                        ctx?.drawImage(img.bitmap || img, 0, 0);
+                        base64 = canvas.toDataURL('image/jpeg', 0.8);
+                      }
+                      
+                      if (base64) {
+                        const uniqueId = `img_p${i}_${j}`;
+                        finalExtractedImages.push({ id: uniqueId, dataUrl: base64 });
+                        pageText += `\n[Image reference: ${uniqueId}]\n`;
+                      }
+                    }
+                  }
+                } catch(e) {
+                  // Ignore failing image extractions
+                }
+              }
+            }
+          } catch(e) {
+            console.warn(`Could not extract images from page ${i}`, e);
+          }
 
           // Automatic OCR detection: if text is very short, looks empty, or if Force OCR is enabled
           const alphanumericCount = (pageText.replace(/[^a-zA-Z0-9]/g, '')).length;
@@ -183,7 +236,9 @@ export default function UploadZone({ onQuizGenerated, isLoading, setIsLoading }:
             if (context) {
               await page.render({ canvasContext: context, viewport }).promise;
               const { data: { text } } = await ocrWorker.recognize(canvas);
-              pageText = text.trim();
+              
+              // Only append the OCR text, keeping any image references we extracted
+              pageText = pageText + "\n" + text.trim();
             }
           }
 
@@ -223,8 +278,9 @@ export default function UploadZone({ onQuizGenerated, isLoading, setIsLoading }:
               'Content-Type': 'application/json',
             },
             body: JSON.stringify({
-              text: combinedText,
+              text: finalCombinedText,
               pdfBase64: attempt === 1 ? pdfBase64 : undefined,
+              images: finalExtractedImages,
               config,
             }),
           });

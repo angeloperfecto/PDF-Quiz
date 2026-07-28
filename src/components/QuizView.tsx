@@ -57,7 +57,7 @@ export default function QuizView({ questions, onQuizSubmit, onSelectReference }:
         newOptionMaps.push(optIndices);
 
         const shuffledOptions = optIndices.map(i => q.options[i]);
-        const newCorrectIndex = optIndices.indexOf(q.correctIndex);
+        const newCorrectIndex = optIndices.findIndex(val => Number(val) === Number(q.correctIndex));
 
         return {
           ...q,
@@ -66,7 +66,10 @@ export default function QuizView({ questions, onQuizSubmit, onSelectReference }:
         };
       });
     } else {
-      newShuffledQuestions = [...questions];
+      newShuffledQuestions = questions.map(q => ({
+        ...q,
+        correctIndex: Number(q.correctIndex)
+      }));
       newQuestionMap = questions.map((_, i) => i);
       newOptionMaps = questions.map(q => q.options.map((_, i) => i));
     }

@@ -309,7 +309,7 @@ app.post('/api/generate-quiz', async (req, res) => {
       });
     }
 
-    const { text, config, pdfBase64 } = req.body;
+    const { text, config, pdfBase64, images } = req.body;
 
     if (!pdfBase64 && (!text || typeof text !== 'string' || text.trim().length === 0)) {
       return res.status(400).json({ error: 'Extracted PDF text or PDF file is required and cannot be empty.' });
@@ -335,6 +335,7 @@ CRITICAL MANDATES FOR PRE-EXISTING QUESTIONS IN THE PDF:
 4. RECOVERY OF ANSWERS: Correctly identify the "correctIndex" (0 to 3) by matching the correct answer against any answer key provided, or by logical analysis.
 5. COMPLETE INTEGRATION: Completely ignore any user-specified question count limit if pre-existing questions are present. Your priority is to extract ALL of them to ensure the user gets exactly what is in the PDF.
 6. NEW GENERATION FALLBACK: Only if there are absolutely NO pre-existing questions in the PDF, generate new multiple-choice questions from the informational content up to ${numQuestionsStr}.
+7. IMAGE DETECTION: We have provided the extracted text which may contain "[Image reference: img_id]" placeholders, alongside actual images. If a question refers to an image (e.g. "Based on the figure below"), you MUST set the "imageAttachment" field for that question to the EXACT image ID from the reference.
 
 Rules:
 1. Strict Accuracy: Every question, option, correct index, and explanation must be 100% backed by the provided text or document.
@@ -350,6 +351,7 @@ Rules:
      - "explanation": string (extremely concise, max 15 words).
      - "sourceExcerpt": string (extremely short verbatim text snippet, max 15 words).
      - "pageNumber": integer (approximate page number).
+     - "imageAttachment": string (optional, the exact Image reference ID if the question relies on an image).
 4. No custom formatting outside the JSON object. Do NOT use markdown code blocks. Just return the raw JSON object.`;
 
     const promptInstructions = `Your absolute, most critical directive is to scan the provided source material for any pre-existing questions, worksheets, quizzes, or exams.
@@ -370,9 +372,23 @@ Adhere strictly to the system instruction. Generate a valid JSON object matching
 
     const strategies = [];
     if (text && text.trim().length > 0) {
+      let promptPayload: any = `${promptInstructions}\n\n--- BEGIN SOURCE TEXT ---\n${text}\n--- END SOURCE TEXT ---`;
+      
+      if (images && images.length > 0) {
+        promptPayload = [ { text: promptPayload } ];
+        for (const img of images) {
+           if (img.dataUrl && img.dataUrl.includes('base64,')) {
+             const [prefix, b64] = img.dataUrl.split('base64,');
+             const mimeType = prefix.replace('data:', '').replace(';', '');
+             promptPayload.push({ text: `[Image reference: ${img.id}]` });
+             promptPayload.push({ inlineData: { mimeType, data: b64 } });
+           }
+        }
+      }
+      
       strategies.push({
         type: 'text',
-        prompt: `${promptInstructions}\n\n--- BEGIN SOURCE TEXT ---\n${text}\n--- END SOURCE TEXT ---`
+        prompt: promptPayload
       });
     }
     if (pdfBase64) {
@@ -439,6 +455,17 @@ Adhere strictly to the system instruction. Generate a valid JSON object matching
           }
         }
       });
+
+      if (parsedData.questions && images && images.length > 0) {
+        for (const q of parsedData.questions) {
+          if (q.imageAttachment) {
+            const matchedImg = images.find((img: any) => img.id === q.imageAttachment);
+            if (matchedImg) {
+               q.imageAttachment = matchedImg.dataUrl;
+            }
+          }
+        }
+      }
 
       res.json(parsedData);
     } catch (parseErr) {

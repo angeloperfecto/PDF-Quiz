@@ -54,7 +54,8 @@ export default function ResultsView({ quiz, attempt, onRetake, onSelectReference
     text += `\n================== DETAILED ANSWER KEY & SOURCE EXPLANATIONS ==================\n\n`;
     quiz.questions.forEach((q, idx) => {
       const letters = ['A', 'B', 'C', 'D'];
-      text += `${idx + 1}. Correct Answer: ${letters[q.correctIndex]}) ${q.options[q.correctIndex]}\n`;
+      const correctIndexNum = Number(q.correctIndex);
+      text += `${idx + 1}. Correct Answer: ${letters[correctIndexNum]}) ${q.options[correctIndexNum]}\n`;
       if (q.explanation) {
         text += `   Explanatory Rationale: ${q.explanation}\n`;
       }
@@ -88,7 +89,7 @@ export default function ResultsView({ quiz, attempt, onRetake, onSelectReference
           ? JSON.parse(attempt.optionMaps![k] as unknown as string) 
           : attempt.optionMaps![k];
         const shuffledOptions = optMap.map(i => q.options[i]);
-        const newCorrectIndex = optMap.indexOf(q.correctIndex);
+        const newCorrectIndex = optMap.findIndex(val => Number(val) === Number(q.correctIndex));
         return {
           ...q,
           options: shuffledOptions,
@@ -100,6 +101,7 @@ export default function ResultsView({ quiz, attempt, onRetake, onSelectReference
       })
     : quiz.questions.map((q, idx) => ({ 
         ...q, 
+        correctIndex: Number(q.correctIndex),
         originalIdx: idx, 
         mappedDisplayIdx: idx,
         optMap: q.options.map((_, i) => i) 
@@ -108,7 +110,7 @@ export default function ResultsView({ quiz, attempt, onRetake, onSelectReference
   // Filter questions based on active tab
   const filteredQuestions = displayQuestions.filter((q) => {
     const userAnswerOriginalOptIdx = attempt.userAnswers[q.originalIdx];
-    const originalIsCorrect = userAnswerOriginalOptIdx === quiz.questions[q.originalIdx].correctIndex;
+    const originalIsCorrect = Number(userAnswerOriginalOptIdx) === Number(quiz.questions[q.originalIdx].correctIndex);
     if (activeQuestionTab === 'correct') return originalIsCorrect;
     if (activeQuestionTab === 'incorrect') return !originalIsCorrect;
     return true;
@@ -230,10 +232,10 @@ export default function ResultsView({ quiz, attempt, onRetake, onSelectReference
             </div>
           ) : (
             filteredQuestions.map((q, arrayIdx) => {
-              const originalUserAnswerOptIdx = attempt.userAnswers[q.originalIdx];
+              const originalUserAnswerOptIdx = Number(attempt.userAnswers[q.originalIdx]);
               // map the original user answer option index back to the display index
-              const displayUserAnswerOptIdx = q.optMap.indexOf(originalUserAnswerOptIdx);
-              const isCorrect = originalUserAnswerOptIdx === quiz.questions[q.originalIdx].correctIndex;
+              const displayUserAnswerOptIdx = q.optMap.findIndex(val => Number(val) === originalUserAnswerOptIdx);
+              const isCorrect = originalUserAnswerOptIdx === Number(quiz.questions[q.originalIdx].correctIndex);
               const letters = ['A', 'B', 'C', 'D'];
 
               return (
@@ -288,7 +290,7 @@ export default function ResultsView({ quiz, attempt, onRetake, onSelectReference
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mb-6">
                     {q.options.map((opt, oIdx) => {
                       const isOptionSelected = displayUserAnswerOptIdx === oIdx;
-                      const isOptionCorrect = q.correctIndex === oIdx;
+                      const isOptionCorrect = Number(q.correctIndex) === oIdx;
                       
                       let optionStyle = 'border-slate-200/40 dark:border-white/5 bg-white/10 dark:bg-[#0f172a]/20';
                       if (isOptionCorrect) {

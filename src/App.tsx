@@ -237,7 +237,7 @@ export default function App() {
 
     let score = 0;
     currentQuiz.questions.forEach((q, idx) => {
-      if (userAnswers[idx] === q.correctIndex) {
+      if (Number(userAnswers[idx]) === Number(q.correctIndex)) {
         score++;
       }
     });
