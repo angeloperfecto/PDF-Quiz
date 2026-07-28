@@ -305,16 +305,25 @@ export default function UploadZone({ onQuizGenerated, isLoading, setIsLoading }:
         }
 
         // Validation Step
-        if (data.totalQuestionsInPDF > 0 && data.questions.length < data.totalQuestionsInPDF) {
+        const extractedCount = data.questions.length;
+        const expectedCount = data.totalQuestionsInPDF;
+        const diff = expectedCount - extractedCount;
+        // Allow a small tolerance of up to 3% or 2 questions (whichever is larger) to handle de-duplication, tiny model omissions, and formatting differences gracefully
+        const tolerance = Math.max(2, Math.ceil(expectedCount * 0.03));
+
+        if (expectedCount > 0 && extractedCount < expectedCount && diff > tolerance) {
           if (attempt === 1 && !currentForceOCR) {
-             console.log(`Validation failed (found ${data.totalQuestionsInPDF} but extracted ${data.questions.length}). Retrying with Force OCR...`);
+             console.log(`Validation failed (expected ${expectedCount} but extracted ${extractedCount}). Retrying with Force OCR...`);
              currentForceOCR = true;
              attempt++;
              continue; // Retry the while loop
           } else {
-             throw new Error(`Extraction Issue Detected:\nThe system found ${data.totalQuestionsInPDF} questions in the PDF, but only successfully extracted ${data.questions.length}.\n\nAI Validation Message: ${data.validationMessage || 'Some questions were missed or skipped.'}`);
+             throw new Error(`Extraction Issue Detected:\nThe system found ${expectedCount} questions in the PDF, but only successfully extracted ${extractedCount}.\n\nAI Validation Message: ${data.validationMessage || 'Some questions were missed or skipped.'}`);
           }
         } else {
+          if (expectedCount > 0 && extractedCount < expectedCount) {
+             console.log(`Minor mismatch accepted within tolerance (${diff} missing out of ${expectedCount} expected, tolerance is ${tolerance}).`);
+          }
           if (data.validationMessage) {
             console.log("Extraction Validation:", data.validationMessage);
           }
