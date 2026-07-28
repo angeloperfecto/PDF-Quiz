@@ -227,6 +227,7 @@ async function generateQuizWithFallback(
             responseSchema: {
               type: 'OBJECT',
               properties: {
+                reasoning: { type: 'STRING', description: 'MANDATORY. Before generating questions, analyze the document here. Identify if there are pre-existing questions. Explicitly list all their numbers and count them. State your commitment to extract EVERY SINGLE ONE without skipping.' },
                 totalQuestionsInPDF: { type: 'INTEGER', description: 'The TRUE EXACT count of pre-existing questions physically present in the document. Do not lie. Count them all. Set to 0 if generating new questions.' },
                 validationMessage: { type: 'STRING', description: 'A brief message detailing if all questions were successfully extracted or if any were missed.' },
                 questions: {
@@ -243,13 +244,14 @@ async function generateQuizWithFallback(
                       correctIndex: { type: 'INTEGER', description: 'The 0-based index (0, 1, 2, or 3) in the options array that matches the correctAnswerText.' },
                       explanation: { type: 'STRING' },
                       sourceExcerpt: { type: 'STRING' },
-                      pageNumber: { type: 'INTEGER' }
+                      pageNumber: { type: 'INTEGER' },
+                      imageAttachment: { type: 'STRING', description: 'optional, the exact Image reference ID if the question relies on an image' }
                     },
                     required: ['questionText', 'options', 'correctAnswerText', 'correctIndex', 'explanation', 'sourceExcerpt']
                   }
                 }
               },
-              required: ['totalQuestionsInPDF', 'validationMessage', 'questions']
+              required: ['reasoning', 'totalQuestionsInPDF', 'validationMessage', 'questions']
             }
           }
         });
@@ -425,6 +427,13 @@ Adhere strictly to the system instruction. Generate a valid JSON object matching
                quizQuestions = currentQuestions;
              }
              continue; // try next strategy
+          } else if (currentQuestions.length === 1 && numQuestionsVal > 1 && text.length > 500) {
+             console.log(`Validation failed: Model suspiciously generated only 1 question for a long document when more were requested. Retrying.`);
+             if (!parsedData || currentQuestions.length > quizQuestions.length) {
+               parsedData = currentParsedData;
+               quizQuestions = currentQuestions;
+             }
+             continue;
           } else {
              // Validation passed!
              success = true;

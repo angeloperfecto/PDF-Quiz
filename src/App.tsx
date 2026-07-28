@@ -219,7 +219,12 @@ export default function App() {
 
     try {
       await saveQuizToFirestore(newQuiz);
-      setQuizzes(prev => [newQuiz, ...prev]);
+      setQuizzes(prev => {
+        if (prev.some(q => q.id === newQuiz.id)) {
+          return prev.map(q => q.id === newQuiz.id ? newQuiz : q);
+        }
+        return [newQuiz, ...prev];
+      });
       setCurrentQuiz(newQuiz);
       setCurrentAttempt(null);
       setActiveTab('active-study');
@@ -1017,7 +1022,7 @@ export default function App() {
                   try {
                     await saveQuizToFirestore(newQuiz);
                     setQuizzes(prev => {
-                      if (isEditingManual) {
+                      if (isEditingManual || prev.some(q => q.id === newQuiz.id)) {
                         return prev.map(q => q.id === newQuiz.id ? newQuiz : q);
                       }
                       return [newQuiz, ...prev];
