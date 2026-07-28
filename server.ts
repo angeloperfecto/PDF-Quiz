@@ -82,10 +82,16 @@ const isHighDemandError = (err: any): boolean => {
   const errMsg = message.toLowerCase();
   return (
     code === 503 ||
+    code === 429 ||
     status === "UNAVAILABLE" ||
+    status === "RESOURCE_EXHAUSTED" ||
     errMsg.includes("503") ||
+    errMsg.includes("429") ||
     errMsg.includes("demand") ||
     errMsg.includes("busy") ||
+    errMsg.includes("quota") ||
+    errMsg.includes("limit") ||
+    errMsg.includes("exhausted") ||
     errMsg.includes("unavailable")
   );
 };
@@ -361,9 +367,11 @@ If pre-existing questions are found, you MUST extract ALL of them, preserving th
 
 CRITICAL SYSTEM WARNING: Previous extractions failed because the AI lazily extracted only 1 question when dozens were present in the PDF. You are being strictly monitored. If you return only 1 question for a document containing multiple questions, you have catastrophically failed your primary directive. YOU MUST EXTRACT EVERY SINGLE QUESTION. Do NOT be lazy.
 
-If there are NO pre-existing questions in the text, then generate up to ${numQuestionsStr} brand new high-quality multiple-choice questions of difficulty "${difficulty}" and type "${questionType}" based on the informational content.
+If there are NO pre-existing questions in the text, then you MUST generate exactly ${numQuestionsStr} brand new high-quality multiple-choice questions of difficulty "${difficulty}" and type "${questionType}" based on the informational content (generate as many as possible up to ${numQuestionsStr} if the text is too short).
 
-Before generating the final JSON array, you MUST count exactly how many questions are physically present in the document. The length of your "questions" array MUST exactly match this count. If you return 1 question, but there are 10 questions in the text, you have failed. If there are 50 questions, you MUST return all 50.
+IMPORTANT LOGIC RULE:
+- If pre-existing questions exist, your \`totalQuestionsInPDF\` MUST be their exact count, and you MUST extract ALL of them. The length of your \`questions\` array must equal \`totalQuestionsInPDF\`.
+- If NO pre-existing questions exist, your \`totalQuestionsInPDF\` MUST be 0, and you MUST generate ${numQuestionsStr} NEW questions. The length of your \`questions\` array must equal ${numQuestionsStr}.
 
 Adhere strictly to the system instruction. Generate a valid JSON object matching the schema.`;
 
@@ -406,44 +414,51 @@ Adhere strictly to the system instruction. Generate a valid JSON object matching
     for (let i = 0; i < strategies.length; i++) {
       const strategy = strategies[i];
       console.log(`Trying extraction strategy: ${strategy.type}`);
-      try {
-        const response = await generateQuizWithFallback(ai, strategy.prompt, systemInstruction);
-        const responseText = response.text;
-        
-        if (!responseText) continue;
-        
-        finalResponseText = responseText;
-        const currentParsedData = parseQuizQuestions(responseText);
-        const currentQuestions = currentParsedData.questions;
-        
-        if (currentQuestions && currentQuestions.length > 0) {
-          console.log(`Model extracted ${currentQuestions.length} questions. totalQuestionsInPDF reported by model: ${currentParsedData.totalQuestionsInPDF || 0}`);
-          const totalInPdf = currentParsedData.totalQuestionsInPDF || 0;
-          if (totalInPdf > 0 && currentQuestions.length !== totalInPdf) {
-             console.log(`Validation failed for strategy ${strategy.type}: Found ${totalInPdf} questions but extracted ${currentQuestions.length}. Retrying if possible.`);
-             // Keep the best attempt so far
-             if (!parsedData || currentQuestions.length > quizQuestions.length) {
+      let strategySuccess = false;
+      for (let attempt = 1; attempt <= 2; attempt++) {
+        try {
+          const response = await generateQuizWithFallback(ai, strategy.prompt, systemInstruction);
+          const responseText = response.text;
+          
+          if (!responseText) continue;
+          
+          finalResponseText = responseText;
+          const currentParsedData = parseQuizQuestions(responseText);
+          const currentQuestions = currentParsedData.questions;
+          
+          if (currentQuestions && currentQuestions.length > 0) {
+            console.log(`Attempt ${attempt}: Model extracted ${currentQuestions.length} questions. totalQuestionsInPDF reported by model: ${currentParsedData.totalQuestionsInPDF || 0}`);
+            const totalInPdf = currentParsedData.totalQuestionsInPDF || 0;
+            
+            if (totalInPdf > 0 && currentQuestions.length !== totalInPdf) {
+               console.log(`Validation failed for strategy ${strategy.type}: Found ${totalInPdf} questions but extracted ${currentQuestions.length}. Retrying.`);
+               if (!parsedData || currentQuestions.length > quizQuestions.length) {
+                 parsedData = currentParsedData;
+                 quizQuestions = currentQuestions;
+               }
+               continue; // retry
+            } else if (totalInPdf === 0 && currentQuestions.length < numQuestionsVal && numQuestionsVal > 1 && attempt < 2) {
+               console.log(`Validation failed: Model generated only ${currentQuestions.length} questions when ${numQuestionsVal} were requested. Retrying.`);
+               if (!parsedData || currentQuestions.length > quizQuestions.length) {
+                 parsedData = currentParsedData;
+                 quizQuestions = currentQuestions;
+               }
+               continue; // retry
+            } else {
+               // Validation passed!
+               strategySuccess = true;
                parsedData = currentParsedData;
                quizQuestions = currentQuestions;
-             }
-             continue; // try next strategy
-          } else if (currentQuestions.length === 1 && numQuestionsVal > 1 && text.length > 500) {
-             console.log(`Validation failed: Model suspiciously generated only 1 question for a long document when more were requested. Retrying.`);
-             if (!parsedData || currentQuestions.length > quizQuestions.length) {
-               parsedData = currentParsedData;
-               quizQuestions = currentQuestions;
-             }
-             continue;
-          } else {
-             // Validation passed!
-             success = true;
-             parsedData = currentParsedData;
-             quizQuestions = currentQuestions;
-             break;
+               break;
+            }
           }
+        } catch (err) {
+          console.error(`Strategy ${strategy.type} attempt ${attempt} failed:`, err);
         }
-      } catch (err) {
-        console.error(`Strategy ${strategy.type} failed:`, err);
+      }
+      if (strategySuccess) {
+         success = true;
+         break;
       }
     }
 
