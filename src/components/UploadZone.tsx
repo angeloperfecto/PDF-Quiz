@@ -305,7 +305,7 @@ export default function UploadZone({ onQuizGenerated, isLoading, setIsLoading }:
         }
 
         // Validation Step
-        if (data.totalQuestionsInPDF > 0 && data.questions.length !== data.totalQuestionsInPDF) {
+        if (data.totalQuestionsInPDF > 0 && data.questions.length < data.totalQuestionsInPDF) {
           if (attempt === 1 && !currentForceOCR) {
              console.log(`Validation failed (found ${data.totalQuestionsInPDF} but extracted ${data.questions.length}). Retrying with Force OCR...`);
              currentForceOCR = true;
@@ -449,7 +449,7 @@ export default function UploadZone({ onQuizGenerated, isLoading, setIsLoading }:
                       <Settings className="w-4 h-4 text-slate-500 dark:text-slate-400" /> Number of Questions
                     </label>
                     <div className="flex gap-2 sm:gap-3 flex-wrap">
-                      {[5, 10, 15, 20, -1].map((num) => (
+                      {[-1].map((num) => (
                         <button
                           key={num}
                           id={`num-btn-${num}`}
@@ -466,27 +466,7 @@ export default function UploadZone({ onQuizGenerated, isLoading, setIsLoading }:
                     </div>
                   </div>
 
-                  <div>
-                    <label className="block text-sm font-semibold text-slate-700 dark:text-slate-300 mb-3">
-                      Difficulty Level
-                    </label>
-                    <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
-                      {(['Easy', 'Medium', 'Hard', 'Mixed'] as const).map((level) => (
-                        <button
-                          key={level}
-                          id={`diff-btn-${level}`}
-                          onClick={() => setDifficulty(level)}
-                          className={`py-3 px-2 rounded-xl font-medium border text-xs text-center transition-all duration-200 ${
-                            difficulty === level
-                              ? 'border-indigo-500/65 bg-indigo-500/10 text-indigo-700 dark:text-indigo-400 dark:border-indigo-550/45 dark:bg-indigo-500/15 font-bold shadow-[0_0_15px_rgba(99,102,241,0.08)]'
-                              : 'border-slate-300/60 dark:border-white/5 bg-white/30 dark:bg-white/5 hover:border-slate-400 dark:hover:border-white/10 text-slate-700 dark:text-slate-300'
-                          }`}
-                        >
-                          {level}
-                        </button>
-                      ))}
-                    </div>
-                  </div>
+
                 </div>
 
                 {/* Question Type & Range */}
@@ -496,7 +476,7 @@ export default function UploadZone({ onQuizGenerated, isLoading, setIsLoading }:
                       Question Type
                     </label>
                     <div className="flex flex-wrap gap-2">
-                      {(['Multiple Choice', 'True/False', 'Definition', 'Identification', 'Mixed'] as const).map((type) => (
+                      {(['Multiple Choice'] as const).map((type) => (
                         <button
                           key={type}
                           id={`type-btn-${type}`}

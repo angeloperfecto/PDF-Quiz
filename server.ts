@@ -326,10 +326,13 @@ app.post('/api/generate-quiz', async (req, res) => {
     const rawNumQuestions = config?.numQuestions !== undefined ? config.numQuestions : 10;
     const isAll = rawNumQuestions === -1 || rawNumQuestions === 'all' || rawNumQuestions === 'All';
     const numQuestionsVal = isAll ? 50 : (Number(rawNumQuestions) || 10);
-    const numQuestionsStr = isAll ? 'all possible (as many as can be cleanly generated, up to 50)' : `${numQuestionsVal}`;
-
+    
     const difficulty = config?.difficulty || 'Medium';
     const questionType = config?.questionType || 'Mixed';
+    
+    const targetCountPhrase = isAll 
+      ? 'as many high-quality, distinct questions as possible from the content (up to a maximum of 50 questions)' 
+      : `exactly ${numQuestionsVal} questions`;
 
     const systemInstruction = `You are an expert, document-grounded multiple-choice quiz scanner, extractor, and generator.
 Your absolute, highest-priority goal is to scan the provided PDF, identify ALL pre-existing questions, and faithfully extract every single one of them onto the website without any omissions, alterations, or summaries.
@@ -341,8 +344,8 @@ CRITICAL MANDATES FOR PRE-EXISTING QUESTIONS IN THE PDF:
    - Extract all answer choices exactly as they appear in the PDF (e.g., A, B, C, D, E) including multi-line answer choices.
    - If the original question has fewer or more than 4 options, map it faithfully into a 4-option structure (A, B, C, D) without losing the original meaning. The correct answer must be one of the options.
 4. RECOVERY OF ANSWERS: Correctly identify the "correctIndex" (0 to 3) by matching the correct answer against any answer key provided, or by logical analysis.
-5. COMPLETE INTEGRATION: Completely ignore any user-specified question count limit if pre-existing questions are present. Your priority is to extract ALL of them to ensure the user gets exactly what is in the PDF.
-6. NEW GENERATION FALLBACK: Only if there are absolutely NO pre-existing questions in the PDF, generate new multiple-choice questions from the informational content up to ${numQuestionsStr}.
+5. COMPLETE INTEGRATION: Scan and extract ALL pre-existing questions found in the PDF.
+6. COMPREHENSIVE QUIZ GENERATION SUPPLEMENT: If the PDF contains NO pre-existing questions, OR if it contains only a small number of pre-existing questions (fewer than 10 questions, such as only 1 or 2 word problems), you MUST supplement the quiz by generating additional, high-quality, relevant multiple-choice questions of similar style, difficulty, and subject matter based on the content of the PDF to make a comprehensive, robust quiz. When "All" is selected, generate a rich and full set of questions (at least 10 to 15 distinct questions, up to 50). Never return only 1 question in total unless the document contains zero information.
 7. IMAGE DETECTION: We have provided the extracted text which may contain "[Image reference: img_id]" placeholders, alongside actual images. If a question refers to an image (e.g. "Based on the figure below"), you MUST set the "imageAttachment" field for that question to the EXACT image ID from the reference.
 
 Rules:
@@ -363,15 +366,18 @@ Rules:
 4. No custom formatting outside the JSON object. Do NOT use markdown code blocks. Just return the raw JSON object.`;
 
     const promptInstructions = `Your absolute, most critical directive is to scan the provided source material for any pre-existing questions, worksheets, quizzes, or exams.
-If pre-existing questions are found, you MUST extract ALL of them, preserving their exact wording, original numbering, ordering, options, and meaning with 100% complete coverage and zero omissions. Converting them to standard 4-option multiple choice structure where necessary. Completely ignore the count limit of ${numQuestionsStr} and extract all pre-existing questions found. DO NOT SUMMARIZE. DO NOT SKIP QUESTIONS. DO NOT STOP AT 1 QUESTION IF THERE ARE MORE.
+If pre-existing questions are found, you MUST extract ALL of them, preserving their exact wording, original numbering, ordering, options, and meaning with 100% complete coverage and zero omissions. Converting them to standard 4-option multiple choice structure where necessary. Completely ignore any count limit and extract all pre-existing questions found. DO NOT SUMMARIZE. DO NOT SKIP QUESTIONS. DO NOT STOP AT 1 QUESTION IF THERE ARE MORE.
 
 CRITICAL SYSTEM WARNING: Previous extractions failed because the AI lazily extracted only 1 question when dozens were present in the PDF. You are being strictly monitored. If you return only 1 question for a document containing multiple questions, you have catastrophically failed your primary directive. YOU MUST EXTRACT EVERY SINGLE QUESTION. Do NOT be lazy.
 
-If there are NO pre-existing questions in the text, then you MUST generate exactly ${numQuestionsStr} brand new high-quality multiple-choice questions of difficulty "${difficulty}" and type "${questionType}" based on the informational content (generate as many as possible up to ${numQuestionsStr} if the text is too short).
+SUPPLEMENTATION RULE: If there are fewer than 10 pre-existing questions in the text, you MUST extract them AND generate additional similar/related multiple-choice questions based on the concepts, topics, or formulas in the text so that the final quiz has at least 10 high-quality, distinct questions (up to 50 if 'All' is requested).
+
+If there are NO pre-existing questions in the text, then you MUST generate ${targetCountPhrase} brand new high-quality multiple-choice questions of difficulty "${difficulty}" and type "${questionType}" based on the informational content. Make sure to generate a rich, complete set of questions.
 
 IMPORTANT LOGIC RULE:
-- If pre-existing questions exist, your \`totalQuestionsInPDF\` MUST be their exact count, and you MUST extract ALL of them. The length of your \`questions\` array must equal \`totalQuestionsInPDF\`.
-- If NO pre-existing questions exist, your \`totalQuestionsInPDF\` MUST be 0, and you MUST generate ${numQuestionsStr} NEW questions. The length of your \`questions\` array must equal ${numQuestionsStr}.
+- If pre-existing questions exist and there are 10 or more, your \`totalQuestionsInPDF\` MUST be their exact count, and the length of your \`questions\` array must equal \`totalQuestionsInPDF\`.
+- If pre-existing questions exist but there are fewer than 10 of them (e.g., only 1 or 2), your \`totalQuestionsInPDF\` MUST be their exact count, and you MUST generate additional similar/related questions so that the length of your \`questions\` array is at least 10 (or up to 50 if 'All' is requested).
+- If NO pre-existing questions exist, your \`totalQuestionsInPDF\` MUST be 0, and you MUST generate ${targetCountPhrase}. The length of your \`questions\` array must equal the number of generated questions.
 
 Adhere strictly to the system instruction. Generate a valid JSON object matching the schema.`;
 
@@ -430,14 +436,14 @@ Adhere strictly to the system instruction. Generate a valid JSON object matching
             console.log(`Attempt ${attempt}: Model extracted ${currentQuestions.length} questions. totalQuestionsInPDF reported by model: ${currentParsedData.totalQuestionsInPDF || 0}`);
             const totalInPdf = currentParsedData.totalQuestionsInPDF || 0;
             
-            if (totalInPdf > 0 && currentQuestions.length !== totalInPdf) {
+            if (totalInPdf > 0 && currentQuestions.length < totalInPdf) {
                console.log(`Validation failed for strategy ${strategy.type}: Found ${totalInPdf} questions but extracted ${currentQuestions.length}. Retrying.`);
                if (!parsedData || currentQuestions.length > quizQuestions.length) {
                  parsedData = currentParsedData;
                  quizQuestions = currentQuestions;
                }
                continue; // retry
-            } else if (totalInPdf === 0 && currentQuestions.length < numQuestionsVal && numQuestionsVal > 1 && attempt < 2) {
+            } else if (totalInPdf === 0 && !isAll && currentQuestions.length < numQuestionsVal && numQuestionsVal > 1 && attempt < 2) {
                console.log(`Validation failed: Model generated only ${currentQuestions.length} questions when ${numQuestionsVal} were requested. Retrying.`);
                if (!parsedData || currentQuestions.length > quizQuestions.length) {
                  parsedData = currentParsedData;

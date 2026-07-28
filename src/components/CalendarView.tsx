@@ -93,7 +93,7 @@ export default function CalendarView({
   const [generatedQuizData, setGeneratedQuizData] = useState<Quiz | null>(null);
   
   // Quiz Generator Config for modal PDF
-  const [modalNumQuestions, setModalNumQuestions] = useState<number>(10);
+  const [modalNumQuestions, setModalNumQuestions] = useState<number>(-1);
   const [modalDifficulty, setModalDifficulty] = useState<QuizConfig['difficulty']>('Medium');
   
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -1474,10 +1474,7 @@ export default function CalendarView({
                             onChange={(e) => setModalNumQuestions(Number(e.target.value))}
                             className="w-full bg-slate-100 dark:bg-white/5 border border-slate-200/50 dark:border-white/10 p-2 rounded-xl"
                           >
-                            <option value={5}>5 Questions</option>
-                            <option value={10}>10 Questions</option>
-                            <option value={20}>20 Questions</option>
-                            <option value={30}>30 Questions</option>
+                            <option value={-1}>All Questions</option>
                           </select>
                         </div>
 
