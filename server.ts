@@ -214,7 +214,7 @@ async function generateQuizWithFallback(
   systemInstruction: string,
   customSchema?: any
 ) {
-  const models = ['gemini-3.6-flash', 'gemini-3.5-flash', 'gemini-3.1-pro-preview', 'gemini-3.1-flash-lite'];
+  const models = ['gemini-3.5-flash', 'gemini-3.1-pro-preview', 'gemini-3.1-flash-lite', 'gemini-1.5-flash'];
   let lastError: any = null;
 
   for (const model of models) {
@@ -568,7 +568,7 @@ If there are NO pre-existing questions on these pages, return an empty array for
                   break;
                 }
               } catch (err) {
-                console.error(`[PDF Parser] [Chunk ${index + 1}/${pageChunks.length}] Attempt ${attempt} failed:`, err);
+                console.warn(`[PDF Parser] [Chunk ${index + 1}/${pageChunks.length}] Attempt ${attempt} failed:`, err instanceof Error ? err.message : String(err));
                 if (attempt < 3) {
                   // Wait progressively longer (exponential-ish backoff) with some randomized jitter (e.g. 2000ms - 5000ms)
                   const backoffTime = (attempt * 2500) + Math.floor(Math.random() * 2000);
@@ -587,8 +587,8 @@ If there are NO pre-existing questions on these pages, return an empty array for
           };
         });
 
-        // Run with concurrency limit of 2 parallel requests to avoid 429 quota exhaustion
-        const chunkResults = await runWithConcurrencyLimit(chunkTasks, 2);
+        // Run with concurrency limit of 1 parallel requests to avoid 429 quota exhaustion
+        const chunkResults = await runWithConcurrencyLimit(chunkTasks, 1);
 
         let mergedQuestions: any[] = [];
         let totalQuestionsInPDFSum = 0;
@@ -605,7 +605,7 @@ If there are NO pre-existing questions on these pages, return an empty array for
               validationMessages.push(`Pages ${result.pages.join(',')}: Successfully extracted ${chunkQuestions.length} questions.`);
             }
           } else {
-            console.error(`[PDF Parser] [Chunk ${result.index + 1}] Failed to extract questions.`);
+            console.warn(`[PDF Parser] [Chunk ${result.index + 1}] Failed to extract questions.`);
             validationMessages.push(`Pages ${result.pages.join(',')}: FAILED to extract questions completely.`);
           }
         }
@@ -643,7 +643,7 @@ If there are NO pre-existing questions on these pages, return an empty array for
           console.log('[PDF Parser] Chunked extraction returned 0 questions. Document is likely purely informational. Falling back to single-pass generator.');
         }
       } catch (chunkErr) {
-        console.error('[PDF Parser] Parallel chunked extraction failed, falling back to standard single-pass strategies:', chunkErr);
+        console.warn('[PDF Parser] Parallel chunked extraction failed, falling back to standard single-pass strategies:', chunkErr instanceof Error ? chunkErr.message : String(chunkErr));
       }
     }
 
