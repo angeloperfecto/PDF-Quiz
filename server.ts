@@ -333,11 +333,200 @@ function parseTextIntoPages(text: string): { pageNum: number; content: string }[
   return pages;
 }
 
+function runHeuristicAndExplanationAnswerKeyCorrection(questions: any[]): any[] {
+  if (!Array.isArray(questions)) return questions;
+
+  questions.forEach(q => {
+    if (!q || !Array.isArray(q.options) || q.options.length === 0) return;
+
+    const explanation = q.explanation || '';
+    const explanationLower = explanation.toLowerCase();
+
+    // Look for pattern like "correct is C" or "choice C" or "option C"
+    const letterPatterns = [
+      /\bcorrect\s*(?:answer|option|choice)?\s*is\s*\(?([A-D])\b/i,
+      /\bcorrect\s*(?:answer|option|choice)?\s*:\s*\(?([A-D])\b/i,
+      /\b([A-D])\s*is\s*the\s*correct\b/i,
+      /\b([A-D])\s*is\s*correct\b/i,
+      /\boption\s*([A-D])\s*is\s*correct\b/i,
+      /\bchoice\s*([A-D])\s*is\s*correct\b/i,
+    ];
+
+    let foundCorrectLetter = null;
+    for (const pattern of letterPatterns) {
+      const match = explanation.match(pattern);
+      if (match && match[1]) {
+        foundCorrectLetter = match[1].toUpperCase();
+        break;
+      }
+    }
+
+    if (foundCorrectLetter) {
+      const targetIdx = foundCorrectLetter.charCodeAt(0) - 65; // A=0, B=1, C=2, D=3
+      if (targetIdx >= 0 && targetIdx < q.options.length && targetIdx !== q.correctIndex) {
+        console.log(`[Heuristic Letter Fix] Correcting answer for question: "${q.questionText.substring(0, 40)}" from index ${q.correctIndex} to ${targetIdx} (${foundCorrectLetter}) matching letter in explanation.`);
+        q.correctIndex = targetIdx;
+        q.correctAnswerText = q.options[targetIdx];
+        return;
+      }
+    }
+
+    // Look for exact option texts or numerical values referenced as correct in the explanation
+    const valPatterns = [
+      /\bcorrect\s*(?:answer|option|choice|is)?\s*is\s*=?\s*([0-9\.\,]+(?:[a-zA-Z%]+)?)\b/i,
+      /\bcorrect\s*(?:answer|option|choice|is)?\s*:\s*([0-9\.\,]+(?:[a-zA-Z%]+)?)\b/i,
+      /=\s*([0-9\.\,]+(?:[a-zA-Z%]+)?)\s*correct\b/i,
+      /=\s*([0-9\.\,]+(?:[a-zA-Z%]+)?)\s*is\s*the\s*correct\b/i,
+      /correct\s*is\s*["']?([^"'\.\,]+)["']?/i
+    ];
+
+    for (const pattern of valPatterns) {
+      const match = explanation.match(pattern);
+      if (match && match[1]) {
+        const foundVal = match[1].trim().toLowerCase().replace(/\s+/g, '');
+        const matchedIdx = q.options.findIndex((opt: string) => {
+          const optLower = String(opt).toLowerCase().replace(/\s+/g, '');
+          return optLower === foundVal || optLower.includes(foundVal) || foundVal.includes(optLower);
+        });
+
+        if (matchedIdx !== -1 && matchedIdx !== q.correctIndex) {
+          console.log(`[Heuristic Value Fix] Correcting answer for question: "${q.questionText.substring(0, 40)}" from index ${q.correctIndex} to ${matchedIdx} (${q.options[matchedIdx]}) matching value "${match[1]}" in explanation.`);
+          q.correctIndex = matchedIdx;
+          q.correctAnswerText = q.options[matchedIdx];
+          return;
+        }
+      }
+    }
+
+    // Check numerical calculations
+    const calculationPattern = /=\s*([0-9\.]+)\b/g;
+    let calcMatch;
+    while ((calcMatch = calculationPattern.exec(explanation)) !== null) {
+      const numStr = calcMatch[1];
+      const matchedIdx = q.options.findIndex((opt: string) => {
+        const optNums = opt.match(/[0-9\.]+/g);
+        return optNums && optNums.includes(numStr);
+      });
+      if (matchedIdx !== -1 && matchedIdx !== q.correctIndex) {
+        console.log(`[Heuristic Calculation Fix] Correcting answer for question: "${q.questionText.substring(0, 40)}" from index ${q.correctIndex} to ${matchedIdx} (${q.options[matchedIdx]}) matching calculated value "${numStr}" in explanation.`);
+        q.correctIndex = matchedIdx;
+        q.correctAnswerText = q.options[matchedIdx];
+        return;
+      }
+    }
+  });
+
+  return questions;
+}
+
+async function verifyAndCorrectQuizQuestions(questions: any[], aiClient: GoogleGenAI): Promise<any[]> {
+  try {
+    console.log('[Quiz Correction] Verifying and correcting answers for', questions.length, 'questions with Gemini...');
+    const verificationSystemInstruction = `You are a world-class, high-precision QA electrical engineering, technical, and scientific quiz investigator.
+Your absolute, highest-priority goal is to verify the accuracy of the answer key for multiple-choice quiz questions.
+
+CRITICAL INSTRUCTIONS FOR MATHEMATICAL & ENGINEERING ACCURACY:
+1. TRIPLE-CHECK CALCULATIONS: For every numerical and calculation question, you MUST manually solve and recalculate the answer using the appropriate formulas, constants, and principles. Do not assume the existing 'correctIndex' or 'correctAnswerText' is correct.
+2. ENGINEERING INTEGRITY: If the question involves electrical engineering (e.g., voltages, currents, impedances, active/reactive power, power factor, transformer ratios, operational amplifiers, logic gates, filters, semiconductor physics), apply rigorous scientific principles and calculations to find the exact correct value.
+3. CHOOSE THE BEST MATCHING OPTION: After calculating the correct value, look at the options. Identify which option matches your calculation (accounting for slight rounding variations).
+4. RECTIFY MISMATCHES: If the explanation or math contradicts 'correctIndex', or if the index points to the wrong option text, you MUST override 'correctIndex' and 'correctAnswerText' to point to the exact option that is scientifically correct.
+5. PRESERVE QUESTIONS & TEXT Verbatim: Never alter the wording, numbering, choices, formulas, or technical details of the questionText and options unless there is a severe typographical extraction error. Your task is strictly to verify and HEAL the correct answer mapping.`;
+
+    const verificationPrompt = `Review the following list of quiz questions. For each question, double check if the 'correctIndex' and 'correctAnswerText' are correct. If they are incorrect or contradict the explanation, fix them. Return the corrected list of questions as a valid JSON array of questions matching the exact original structure.
+
+--- QUESTIONS TO REVIEW ---
+${JSON.stringify(questions, null, 2)}`;
+
+    const response = await aiClient.models.generateContent({
+      model: 'gemini-3.5-flash',
+      contents: verificationPrompt,
+      config: {
+        systemInstruction: verificationSystemInstruction,
+        temperature: 0.1,
+        maxOutputTokens: 8192,
+        responseMimeType: 'application/json',
+        responseSchema: {
+          type: 'ARRAY',
+          items: {
+            type: 'OBJECT',
+            properties: {
+              id: { type: 'STRING' },
+              questionText: { type: 'STRING' },
+              options: { type: 'ARRAY', items: { type: 'STRING' } },
+              correctAnswerText: { type: 'STRING' },
+              correctIndex: { type: 'INTEGER' },
+              explanation: { type: 'STRING' },
+              sourceExcerpt: { type: 'STRING' },
+              pageNumber: { type: 'INTEGER' },
+              difficulty: { type: 'STRING' },
+              imageAttachment: { type: 'STRING' }
+            },
+            required: ['questionText', 'options', 'correctAnswerText', 'correctIndex', 'explanation', 'sourceExcerpt']
+          }
+        }
+      }
+    });
+
+    const responseText = (response.text || '').replace(/```json/g, '').replace(/```/g, '').trim();
+    const correctedQuestions = JSON.parse(responseText);
+    if (Array.isArray(correctedQuestions) && correctedQuestions.length === questions.length) {
+      console.log('[Quiz Correction] Successfully verified and corrected questions with Gemini.');
+      return correctedQuestions;
+    }
+  } catch (err) {
+    console.warn('[Quiz Correction] Gemini verification pass failed, falling back to local heuristics:', err instanceof Error ? err.message : String(err));
+  }
+  return questions;
+}
+
 const app = express();
 const PORT = 3000;
 
 // Increase body limit for large PDF text uploads
 app.use(express.json({ limit: '50mb' }));
+
+// API endpoint to audit and correct an entire quiz list of questions
+app.post('/api/audit-quiz', async (req, res) => {
+  try {
+    if (!ai) {
+      return res.status(500).json({ error: 'Gemini API key is not configured on the server. Please check your AI Studio secrets settings.' });
+    }
+    const { questions } = req.body;
+    if (!Array.isArray(questions)) {
+      return res.status(400).json({ error: 'Questions array is required.' });
+    }
+
+    console.log(`[Quiz Audit] Received ${questions.length} questions for auditing and healing.`);
+    
+    // 1. Run local heuristics to repair simple mismatches
+    let auditedQuestions = runHeuristicAndExplanationAnswerKeyCorrection(questions);
+
+    // 2. Run LLM QA correction pass for deeper mathematical/conceptual validation
+    try {
+      auditedQuestions = await verifyAndCorrectQuizQuestions(auditedQuestions, ai);
+    } catch (qaErr) {
+      console.warn('[Quiz Audit] LLM QA correction pass failed:', qaErr);
+    }
+
+    // 3. Align correctIndex with correctAnswerText strictly
+    auditedQuestions.forEach(q => {
+      if (q.correctAnswerText && Array.isArray(q.options)) {
+        const actualIndex = q.options.findIndex((opt: string) => 
+          String(opt).trim().toLowerCase() === String(q.correctAnswerText).trim().toLowerCase()
+        );
+        if (actualIndex !== -1 && actualIndex !== q.correctIndex) {
+          console.log(`[Quiz Audit] Correcting index misalignment: "${q.questionText.substring(0, 40)}" index ${q.correctIndex} -> ${actualIndex}`);
+          q.correctIndex = actualIndex;
+        }
+      }
+    });
+
+    res.json({ questions: auditedQuestions });
+  } catch (err: any) {
+    console.error('[Quiz Audit] Error during audit route:', err);
+    res.status(500).json({ error: err.message || 'An error occurred during quiz auditing.' });
+  }
+});
 
 // API endpoint to check configuration and health
 app.get('/api/health', (req, res) => {
@@ -736,7 +925,21 @@ If there are NO pre-existing questions on these pages, return an empty array for
     }
 
     try {
-      // Fix correctIndex if correctAnswerText is provided and matches an option but correctIndex is wrong
+      // 1. Run local heuristics to correct answers based on explanation keywords and calculations
+      console.log('[Quiz Correction] Running local heuristics...');
+      quizQuestions = runHeuristicAndExplanationAnswerKeyCorrection(quizQuestions);
+
+      // 2. Run LLM QA correction pass to double-check and rectify any complex explanation mismatches
+      try {
+        quizQuestions = await verifyAndCorrectQuizQuestions(quizQuestions, ai);
+      } catch (qaErr) {
+        console.warn('[Quiz Correction] LLM QA correction pass failed:', qaErr);
+      }
+
+      // 3. Update parsedData questions array with corrected items
+      parsedData.questions = quizQuestions;
+
+      // 4. Align correctIndex with correctAnswerText strictly
       quizQuestions.forEach(q => {
         if (q.correctAnswerText && Array.isArray(q.options)) {
           const actualIndex = q.options.findIndex((opt: string) => 

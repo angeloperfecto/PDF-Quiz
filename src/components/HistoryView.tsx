@@ -1,19 +1,53 @@
 import React, { useState, useMemo } from 'react';
-import { BookOpen, Calendar, HelpCircle, Trophy, Trash2, ArrowRight, FileText, Search, Filter } from 'lucide-react';
+import { 
+  BookOpen, 
+  Calendar, 
+  HelpCircle, 
+  Trophy, 
+  Trash2, 
+  ArrowRight, 
+  FileText, 
+  Search, 
+  Filter, 
+  Sparkles, 
+  Loader2, 
+  ShieldCheck, 
+  RefreshCw, 
+  CheckCircle 
+} from 'lucide-react';
 import { Quiz } from '../types';
 
 interface HistoryViewProps {
   quizzes: Quiz[];
+  user: any;
   onSelectQuiz: (quiz: Quiz) => void;
   onDeleteQuiz: (quizId: string) => void;
   onEditQuiz: (quiz: Quiz) => void;
+  onUpdateQuiz?: (quiz: Quiz) => void;
 }
 
-export default function HistoryView({ quizzes, onSelectQuiz, onDeleteQuiz, onEditQuiz }: HistoryViewProps) {
+export default function HistoryView({ 
+  quizzes, 
+  user,
+  onSelectQuiz, 
+  onDeleteQuiz, 
+  onEditQuiz,
+  onUpdateQuiz 
+}: HistoryViewProps) {
   const [deleteConfirmId, setDeleteConfirmId] = useState<string | null>(null);
   const [searchTerm, setSearchTerm] = useState('');
   const [filterDifficulty, setFilterDifficulty] = useState<string>('All');
   const [filterType, setFilterType] = useState<'All' | 'Manual' | 'PDF'>('All');
+
+  // Audit and Healing State
+  const [isAuditing, setIsAuditing] = useState<boolean>(false);
+  const [singleAuditId, setSingleAuditId] = useState<string | null>(null);
+  const [auditProgress, setAuditProgress] = useState<{ 
+    total: number; 
+    current: number; 
+    corrections: number; 
+    activeQuizName: string; 
+  } | null>(null);
 
   const getBestScore = (quiz: Quiz) => {
     if (!quiz.scoreHistory || quiz.scoreHistory.length === 0) return null;
@@ -23,17 +57,14 @@ export default function HistoryView({ quizzes, onSelectQuiz, onDeleteQuiz, onEdi
 
   const filteredQuizzes = useMemo(() => {
     return quizzes.filter((quiz) => {
-      // Keyword search (title, subject, filename)
       const matchesSearch = 
         !searchTerm || 
         (quiz.title || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
         (quiz.subject || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
         (quiz.fileName || '').toLowerCase().includes(searchTerm.toLowerCase());
 
-      // Difficulty filter
       const matchesDifficulty = filterDifficulty === 'All' || quiz.difficulty === filterDifficulty;
 
-      // Type filter
       const matchesType = 
         filterType === 'All' || 
         (filterType === 'Manual' && quiz.isManual) || 
@@ -43,8 +74,107 @@ export default function HistoryView({ quizzes, onSelectQuiz, onDeleteQuiz, onEdi
     });
   }, [quizzes, searchTerm, filterDifficulty, filterType]);
 
+  // Core Audit API Handler
+  const auditQuiz = async (quiz: Quiz): Promise<number> => {
+    try {
+      const response = await fetch('/api/audit-quiz', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ questions: quiz.questions }),
+      });
+      
+      if (!response.ok) {
+        throw new Error('Audit API returned an error');
+      }
+      
+      const data = await response.json();
+      if (data && Array.isArray(data.questions)) {
+        let correctionCount = 0;
+        const updatedQuestions = quiz.questions.map((originalQ, qIdx) => {
+          const correctedQ = data.questions[qIdx];
+          if (correctedQ) {
+            const originalIndex = Number(originalQ.correctIndex);
+            const correctedIndex = Number(correctedQ.correctIndex);
+            const originalText = String(originalQ.correctAnswerText || '').trim().toLowerCase();
+            const correctedText = String(correctedQ.correctAnswerText || '').trim().toLowerCase();
+            
+            if (originalIndex !== correctedIndex || originalText !== correctedText) {
+              correctionCount++;
+            }
+            return {
+              ...originalQ,
+              correctIndex: correctedIndex,
+              correctAnswerText: correctedQ.correctAnswerText,
+              explanation: correctedQ.explanation || originalQ.explanation
+            };
+          }
+          return originalQ;
+        });
+        
+        if (correctionCount > 0 || updatedQuestions.some((q, i) => q.explanation !== quiz.questions[i].explanation)) {
+          const updatedQuiz = {
+            ...quiz,
+            questions: updatedQuestions
+          };
+          if (onUpdateQuiz) {
+            await onUpdateQuiz(updatedQuiz);
+          }
+        }
+        return correctionCount;
+      }
+    } catch (err) {
+      console.error(`Failed to audit quiz ${quiz.id}:`, err);
+    }
+    return 0;
+  };
+
+  // Batch Audit All Quizzes
+  const auditAllQuizzes = async () => {
+    if (quizzes.length === 0) return;
+    setIsAuditing(true);
+    let totalCorrections = 0;
+    
+    setAuditProgress({
+      total: quizzes.length,
+      current: 0,
+      corrections: 0,
+      activeQuizName: ''
+    });
+    
+    for (let i = 0; i < quizzes.length; i++) {
+      const quiz = quizzes[i];
+      setAuditProgress(prev => prev ? {
+        ...prev,
+        current: i,
+        activeQuizName: quiz.title || quiz.fileName || 'Untitled'
+      } : null);
+      
+      const corrections = await auditQuiz(quiz);
+      totalCorrections += corrections;
+      
+      setAuditProgress(prev => prev ? {
+        ...prev,
+        corrections: prev.corrections + corrections
+      } : null);
+    }
+    
+    setAuditProgress(prev => prev ? {
+      ...prev,
+      current: quizzes.length,
+      activeQuizName: 'Verification Complete!'
+    } : null);
+    
+    setTimeout(() => {
+      setIsAuditing(false);
+      setAuditProgress(null);
+    }, 6000);
+  };
+
   return (
     <div className="space-y-6" id="history-view-root">
+      {/* Header */}
       <div className="flex items-center justify-between border-b border-slate-200/30 dark:border-white/5 pb-4">
         <div>
           <h3 className="text-xl font-bold text-slate-800 dark:text-slate-100 font-display">
@@ -54,6 +184,82 @@ export default function HistoryView({ quizzes, onSelectQuiz, onDeleteQuiz, onEdi
             Re-access, study, or review previous generated quizzes and files.
           </p>
         </div>
+      </div>
+
+      {/* Diagnostic & Healing Hub Banner */}
+      <div className="bg-slate-50 dark:bg-slate-900/60 border border-slate-200/80 dark:border-white/5 rounded-2xl p-5 shadow-sm space-y-4">
+        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+          <div className="space-y-1">
+            <div className="flex items-center gap-2">
+              <Sparkles className="w-5 h-5 text-indigo-600 dark:text-indigo-400" />
+              <h4 className="font-bold text-sm text-slate-800 dark:text-slate-100 uppercase tracking-wider font-display">
+                Smart Quiz Auditing & Healing Hub
+              </h4>
+            </div>
+            <p className="text-xs text-slate-600 dark:text-slate-300 leading-relaxed max-w-2xl">
+              Verify your questions against original technical references, recalculate equations, and repair any misaligned answer keys using our dual-layer correction engine.
+            </p>
+          </div>
+          
+          <button
+            onClick={auditAllQuizzes}
+            disabled={isAuditing || quizzes.length === 0}
+            className="self-start sm:self-center px-4 py-2.5 bg-indigo-600 hover:bg-indigo-500 disabled:bg-slate-200 disabled:dark:bg-slate-800 disabled:text-slate-400 text-white rounded-xl text-xs font-bold transition-all shadow-sm flex items-center gap-2 cursor-pointer disabled:cursor-not-allowed"
+          >
+            {isAuditing && !singleAuditId ? (
+              <Loader2 className="w-3.5 h-3.5 animate-spin" />
+            ) : (
+              <ShieldCheck className="w-3.5 h-3.5" />
+            )}
+            {isAuditing && !singleAuditId ? 'Auditing & Repairing...' : 'Verify & Heal All Quizzes'}
+          </button>
+        </div>
+
+        {/* Audit Progress Dashboard */}
+        {auditProgress && (
+          <div className="bg-white dark:bg-slate-950/40 border border-slate-200 dark:border-white/5 rounded-xl p-4 space-y-3 animate-fadeIn">
+            <div className="flex items-center justify-between text-xs">
+              <span className="font-bold text-slate-700 dark:text-slate-300 flex items-center gap-2">
+                {auditProgress.current < auditProgress.total ? (
+                  <>
+                    <RefreshCw className="w-3.5 h-3.5 text-indigo-500 animate-spin" />
+                    Analyzing: <span className="text-indigo-600 dark:text-indigo-400 font-mono font-extrabold">{auditProgress.activeQuizName}</span>
+                  </>
+                ) : (
+                  <>
+                    <CheckCircle className="w-3.5 h-3.5 text-emerald-500" />
+                    Audit Complete!
+                  </>
+                )}
+              </span>
+              <span className="font-mono font-bold text-slate-500 dark:text-slate-400">
+                {auditProgress.current} / {auditProgress.total} Quizzes
+              </span>
+            </div>
+
+            {/* Progress Bar */}
+            <div className="w-full bg-slate-100 dark:bg-slate-900 h-2 rounded-full overflow-hidden">
+              <div
+                className="bg-indigo-600 dark:bg-indigo-400 h-full transition-all duration-300"
+                style={{ width: `${(auditProgress.current / auditProgress.total) * 100}%` }}
+              />
+            </div>
+
+            {/* Corrections Found */}
+            <div className="flex items-center justify-between text-xs pt-1">
+              <span className="text-slate-600 dark:text-slate-400 font-semibold">
+                Mismatched answer keys detected & healed:
+              </span>
+              <span className={`px-2 py-0.5 rounded-full font-bold font-mono text-[11px] ${
+                auditProgress.corrections > 0 
+                  ? 'bg-amber-100 text-amber-800 dark:bg-amber-950/40 dark:text-amber-400' 
+                  : 'bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-400'
+              }`}>
+                {auditProgress.corrections} Fixed
+              </span>
+            </div>
+          </div>
+        )}
       </div>
 
       {/* Search and Filters */}
@@ -213,13 +419,35 @@ export default function HistoryView({ quizzes, onSelectQuiz, onDeleteQuiz, onEdi
                     )}
                   </div>
 
-                  <div className="flex items-center gap-4">
+                  <div className="flex flex-wrap items-center gap-3">
                     <button
                       onClick={() => onEditQuiz(quiz)}
                       className="text-xs font-bold text-slate-500 hover:text-slate-800 dark:text-slate-400 dark:hover:text-slate-200 transition-colors"
                     >
                       {quiz.isManual ? 'Edit Quiz' : 'Clone to Manual'}
                     </button>
+                    
+                    <button
+                      onClick={async () => {
+                        if (isAuditing) return;
+                        setIsAuditing(true);
+                        setSingleAuditId(quiz.id);
+                        const corrections = await auditQuiz(quiz);
+                        setIsAuditing(false);
+                        setSingleAuditId(null);
+                        alert(`Verification complete! Successfully healed ${corrections} mismatched answer keys in this quiz.`);
+                      }}
+                      disabled={isAuditing}
+                      className="text-xs font-bold text-indigo-600 dark:text-indigo-400 disabled:text-slate-400 flex items-center gap-1 font-display"
+                    >
+                      {singleAuditId === quiz.id ? (
+                        <Loader2 className="w-3 h-3 animate-spin text-indigo-500" />
+                      ) : (
+                        <ShieldCheck className="w-3.5 h-3.5 text-indigo-500" />
+                      )}
+                      Verify Answers
+                    </button>
+
                     {!quiz.isDraft && (
                       <button
                         id={`open-quiz-${quiz.id}`}

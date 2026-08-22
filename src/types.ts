@@ -3,6 +3,7 @@ export interface Question {
   questionText: string;
   options: string[];
   correctIndex: number;
+  correctAnswerText?: string;
   explanation?: string;
   sourceExcerpt?: string;
   pageNumber?: number;

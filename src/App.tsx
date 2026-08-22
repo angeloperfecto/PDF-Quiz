@@ -311,6 +311,19 @@ export default function App() {
     }
   };
 
+  const handleUpdateQuiz = async (updatedQuiz: Quiz) => {
+    try {
+      await saveQuizToFirestore(updatedQuiz);
+      setQuizzes(prev => prev.map(q => q.id === updatedQuiz.id ? updatedQuiz : q));
+      if (currentQuiz && currentQuiz.id === updatedQuiz.id) {
+        setCurrentQuiz(updatedQuiz);
+      }
+    } catch (err) {
+      console.error('Error updating quiz:', err);
+      setError('Failed to save audited quiz corrections to the database.');
+    }
+  };
+
   const handleAssociateFile = (e: React.ChangeEvent<HTMLInputElement>) => {
     if (e.target.files && e.target.files[0]) {
       setActiveFile(e.target.files[0]);
@@ -963,12 +976,14 @@ export default function App() {
               <div className="max-w-4xl mx-auto">
                 <HistoryView
                   quizzes={quizzes}
+                  user={user}
                   onSelectQuiz={handleSelectQuizFromHistory}
                   onDeleteQuiz={handleDeleteQuiz}
                   onEditQuiz={(quiz) => {
                     setManualQuizToEdit(quiz);
                     setActiveTab('manual-quiz');
                   }}
+                  onUpdateQuiz={handleUpdateQuiz}
                 />
               </div>
             </div>
