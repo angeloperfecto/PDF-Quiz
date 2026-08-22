@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { ChevronLeft, ChevronRight, Timer, HelpCircle, CheckCircle, Clock, XCircle, Sparkles } from 'lucide-react';
+import { ChevronLeft, ChevronRight, Timer, HelpCircle, CheckCircle, Clock, XCircle, Sparkles, Eye, EyeOff } from 'lucide-react';
 import { Question } from '../types';
 
 interface QuizViewProps {
@@ -21,6 +21,7 @@ export default function QuizView({ questions, onQuizSubmit, onSelectReference }:
   const [elapsedSeconds, setElapsedSeconds] = useState<number>(0);
   const [timerEnabled, setTimerEnabled] = useState<boolean>(true);
   const [instantFeedback, setInstantFeedback] = useState<boolean>(false);
+  const [showGrid, setShowGrid] = useState<boolean>(true);
 
   // Reset when questions change
   useEffect(() => {
@@ -341,37 +342,57 @@ export default function QuizView({ questions, onQuizSubmit, onSelectReference }:
 
       {/* Quick Jump Grid */}
       <div className="border-t border-slate-200/30 dark:border-white/5 pt-6 mt-6 flex-shrink-0">
-        <p className="text-xs font-bold text-slate-600 dark:text-slate-400 mb-3 uppercase tracking-wider">
-          Quiz Progress Grid ({totalAnsweredCount} / {questions.length} answered)
-        </p>
-        <div className="flex flex-wrap gap-2">
-          {shuffledQuestions.map((_, idx) => {
-            const isAnswered = selectedAnswers[idx] !== -1;
-            const isCurrent = idx === currentIdx;
-            return (
-              <button
-                key={idx}
-                id={`jump-btn-${idx}`}
-                onClick={() => {
-                  setCurrentIdx(idx);
-                  const q = shuffledQuestions[idx];
-                  if (q.pageNumber || q.sourceExcerpt) {
-                    onSelectReference(q.pageNumber, q.sourceExcerpt);
-                  }
-                }}
-                className={`w-8 h-8 rounded-lg font-bold text-xs flex items-center justify-center border transition-all ${
-                  isCurrent
-                    ? 'border-indigo-500/60 bg-indigo-600 text-white scale-110 shadow-md font-extrabold'
-                    : isAnswered
-                    ? 'border-slate-300 dark:border-white/10 bg-slate-200/40 dark:bg-white/10 text-slate-800 dark:text-slate-200'
-                    : 'border-slate-300/60 dark:border-white/5 bg-white/25 dark:bg-white/5 hover:border-slate-400 dark:hover:border-white/10 text-slate-600 dark:text-slate-400'
-                }`}
-              >
-                {idx + 1}
-              </button>
-            );
-          })}
+        <div className="flex items-center justify-between mb-3">
+          <p className="text-xs font-bold text-slate-600 dark:text-slate-400 uppercase tracking-wider">
+            Quiz Progress Grid ({totalAnsweredCount} / {questions.length} answered)
+          </p>
+          <button
+            id="toggle-progress-grid-btn"
+            onClick={() => setShowGrid(!showGrid)}
+            className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-[11px] font-bold text-slate-600 dark:text-slate-300 transition-all cursor-pointer"
+          >
+            {showGrid ? (
+              <>
+                <EyeOff className="w-3.5 h-3.5" /> Hide Grid
+              </>
+            ) : (
+              <>
+                <Eye className="w-3.5 h-3.5" /> Show Grid
+              </>
+            )}
+          </button>
         </div>
+
+        {showGrid && (
+          <div className="flex flex-wrap gap-2 animate-fadeIn">
+            {shuffledQuestions.map((_, idx) => {
+              const isAnswered = selectedAnswers[idx] !== -1;
+              const isCurrent = idx === currentIdx;
+              return (
+                <button
+                  key={idx}
+                  id={`jump-btn-${idx}`}
+                  onClick={() => {
+                    setCurrentIdx(idx);
+                    const q = shuffledQuestions[idx];
+                    if (q.pageNumber || q.sourceExcerpt) {
+                      onSelectReference(q.pageNumber, q.sourceExcerpt);
+                    }
+                  }}
+                  className={`w-8 h-8 rounded-lg font-bold text-xs flex items-center justify-center border transition-all ${
+                    isCurrent
+                      ? 'border-indigo-500/60 bg-indigo-600 text-white scale-110 shadow-md font-extrabold'
+                      : isAnswered
+                      ? 'border-slate-300 dark:border-white/10 bg-slate-200/40 dark:bg-white/10 text-slate-800 dark:text-slate-200'
+                      : 'border-slate-300/60 dark:border-white/5 bg-white/25 dark:bg-white/5 hover:border-slate-400 dark:hover:border-white/10 text-slate-600 dark:text-slate-400'
+                  }`}
+                >
+                  {idx + 1}
+                </button>
+              );
+            })}
+          </div>
+        )}
       </div>
 
       {/* Bottom Actions */}

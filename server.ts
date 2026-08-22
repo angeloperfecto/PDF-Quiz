@@ -27,6 +27,128 @@ if (apiKey) {
 // Helper to pause execution
 const delay = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 
+// Wrap Gemini generateContent with progressive exponential backoff on 429 Resource Exhausted/Rate Limits
+async function generateContentWithRetry(aiClient: GoogleGenAI, params: any, maxRetries = 4, initialDelay = 3000): Promise<any> {
+  let attempt = 0;
+  while (true) {
+    try {
+      return await aiClient.models.generateContent(params);
+    } catch (err: any) {
+      attempt++;
+      const isQuota = isTransientError(err) || isHighDemandError(err);
+      if (isQuota && attempt < maxRetries) {
+        const sleepTime = initialDelay * Math.pow(2, attempt - 1) + Math.floor(Math.random() * 1000);
+        console.warn(`[Gemini Retry] Quota exceeded or model busy (Attempt ${attempt}/${maxRetries}). Sleeping ${sleepTime}ms before retrying...`);
+        await delay(sleepTime);
+      } else {
+        throw err;
+      }
+    }
+  }
+}
+
+// Robustly cleans a JSON string of codeblock annotations or trailing commas
+function cleanAndParseJSON(str: string): any {
+  let cleaned = str.trim();
+  cleaned = cleaned.replace(/^```json/i, '').replace(/```$/s, '').trim();
+  
+  const firstBrace = cleaned.indexOf('{');
+  const firstBracket = cleaned.indexOf('[');
+  
+  if (firstBracket !== -1 && (firstBrace === -1 || firstBracket < firstBrace)) {
+    const lastBracket = cleaned.lastIndexOf(']');
+    if (lastBracket !== -1) {
+      cleaned = cleaned.substring(firstBracket, lastBracket + 1);
+    }
+  } else if (firstBrace !== -1) {
+    const lastBrace = cleaned.lastIndexOf('}');
+    if (lastBrace !== -1) {
+      cleaned = cleaned.substring(firstBrace, lastBrace + 1);
+    }
+  }
+
+  try {
+    return JSON.parse(cleaned);
+  } catch (err) {
+    try {
+      const repaired = cleaned
+        .replace(/\\n/g, "\\n")
+        .replace(/\n/g, " ")
+        .replace(/\r/g, "")
+        .replace(/\t/g, " ")
+        .replace(/,\s*\}/g, '}')
+        .replace(/,\s*\]/g, ']');
+      return JSON.parse(repaired);
+    } catch (err2) {
+      throw new Error(`JSON parsing failed: ${err instanceof Error ? err.message : String(err)}`);
+    }
+  }
+}
+
+// Parses a questions array by falling back to brace-matching block recovery if standard parsing fails
+function robustParseQuestionsArray(rawStr: string): any[] {
+  try {
+    const parsed = cleanAndParseJSON(rawStr);
+    if (Array.isArray(parsed)) return parsed;
+    if (parsed && typeof parsed === 'object' && Array.isArray(parsed.questions)) {
+      return parsed.questions;
+    }
+  } catch (e) {
+    console.warn('[Robust JSON Parser] Standard array parsing failed, recovering questions manually...', e);
+  }
+
+  const questions: any[] = [];
+  let braceCount = 0;
+  let inString = false;
+  let escapeNext = false;
+  let objectStartIdx = -1;
+  const str = rawStr.trim();
+
+  for (let i = 0; i < str.length; i++) {
+    const char = str[i];
+    if (escapeNext) {
+      escapeNext = false;
+      continue;
+    }
+    if (char === '\\') {
+      escapeNext = true;
+      continue;
+    }
+    if (char === '"') {
+      inString = !inString;
+      continue;
+    }
+    if (!inString) {
+      if (char === '{') {
+        if (braceCount === 0) {
+          objectStartIdx = i;
+        }
+        braceCount++;
+      } else if (char === '}') {
+        braceCount--;
+        if (braceCount === 0 && objectStartIdx !== -1) {
+          const objStr = str.substring(objectStartIdx, i + 1);
+          try {
+            const obj = JSON.parse(objStr);
+            if (obj && typeof obj === 'object' && (obj.questionText || obj.question)) {
+              // Ensure fields are aligned
+              if (obj.question && !obj.questionText) {
+                obj.questionText = obj.question;
+              }
+              questions.push(obj);
+            }
+          } catch (err) {
+            // Ignore malformed inner object
+          }
+          objectStartIdx = -1;
+        }
+      }
+    }
+  }
+
+  return questions;
+}
+
 // Extract clean error message, code, and status from any Gemini API error
 const getErrorDetails = (err: any) => {
   let message = String(err?.message || err || "");
@@ -223,7 +345,7 @@ async function generateQuizWithFallback(
     for (let attempt = 1; attempt <= 1; attempt++) {
       try {
         console.log(`Generating quiz content using model ${model}...`);
-        const response = await aiClient.models.generateContent({
+        const response = await generateContentWithRetry(aiClient, {
           model,
           contents: userPrompt,
           config: {
@@ -437,7 +559,7 @@ CRITICAL INSTRUCTIONS FOR MATHEMATICAL & ENGINEERING ACCURACY:
 --- QUESTIONS TO REVIEW ---
 ${JSON.stringify(questions, null, 2)}`;
 
-    const response = await aiClient.models.generateContent({
+    const response = await generateContentWithRetry(aiClient, {
       model: 'gemini-3.5-flash',
       contents: verificationPrompt,
       config: {
@@ -467,11 +589,31 @@ ${JSON.stringify(questions, null, 2)}`;
       }
     });
 
-    const responseText = (response.text || '').replace(/```json/g, '').replace(/```/g, '').trim();
-    const correctedQuestions = JSON.parse(responseText);
-    if (Array.isArray(correctedQuestions) && correctedQuestions.length === questions.length) {
+    const responseText = (response.text || '').trim();
+    const correctedQuestions = robustParseQuestionsArray(responseText);
+    if (Array.isArray(correctedQuestions) && correctedQuestions.length > 0) {
       console.log('[Quiz Correction] Successfully verified and corrected questions with Gemini.');
-      return correctedQuestions;
+      
+      // If length matches perfectly, return directly
+      if (correctedQuestions.length === questions.length) {
+        return correctedQuestions;
+      }
+      
+      // If some were missed/extra, patch the ones that correspond
+      const patched = [...questions];
+      correctedQuestions.forEach((cq) => {
+        const idx = patched.findIndex(q => 
+          q.id === cq.id || 
+          q.questionText.trim().toLowerCase() === cq.questionText.trim().toLowerCase()
+        );
+        if (idx !== -1) {
+          patched[idx] = {
+            ...patched[idx],
+            ...cq
+          };
+        }
+      });
+      return patched;
     }
   } catch (err) {
     console.warn('[Quiz Correction] Gemini verification pass failed, falling back to local heuristics:', err instanceof Error ? err.message : String(err));
