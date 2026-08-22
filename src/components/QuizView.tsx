@@ -183,49 +183,49 @@ export default function QuizView({ questions, onQuizSubmit, onSelectReference }:
   const totalAnsweredCount = selectedAnswers.filter(ans => ans !== -1).length;
 
   return (
-    <div className="glass-card border border-slate-200/50 dark:border-white/10 rounded-3xl p-6 sm:p-8 shadow-xl shadow-slate-100/10 dark:shadow-none flex flex-col h-full" id="quiz-view-root">
+    <div className="glass-card border border-slate-200/50 dark:border-white/10 rounded-2xl sm:rounded-3xl p-4 sm:p-6 md:p-8 shadow-xl shadow-slate-100/10 dark:shadow-none flex flex-col h-full" id="quiz-view-root">
       {/* Quiz Header */}
-      <div className="flex items-center justify-between border-b border-slate-200/30 dark:border-white/5 pb-5 mb-6 flex-shrink-0">
-        <div className="flex items-center gap-2.5">
-          <HelpCircle className="w-5 h-5 text-indigo-500" />
-          <h3 className="font-bold text-slate-800 dark:text-slate-100 text-lg font-display">
+      <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between border-b border-slate-200/30 dark:border-white/5 pb-4 sm:pb-5 mb-4 sm:mb-6 flex-shrink-0">
+        <div className="flex items-center gap-2 sm:gap-2.5">
+          <HelpCircle className="w-5 h-5 text-indigo-500 flex-shrink-0" />
+          <h3 className="font-bold text-slate-800 dark:text-slate-100 text-base sm:text-lg font-display truncate">
             Question {currentIdx + 1} of {questions.length}
           </h3>
         </div>
 
         {/* Timer & Instant Feedback Controls */}
-        <div className="flex flex-wrap items-center gap-2 sm:gap-3">
+        <div className="grid grid-cols-2 sm:flex sm:flex-wrap items-center gap-2 sm:gap-3 w-full sm:w-auto">
           <button
             id="toggle-feedback-btn"
             onClick={() => setInstantFeedback(!instantFeedback)}
-            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl border text-xs font-semibold transition-all ${
+            className={`flex items-center justify-center gap-1.5 px-2.5 py-2 sm:py-1.5 rounded-xl border text-[11px] sm:text-xs font-semibold transition-all cursor-pointer ${
               instantFeedback
                 ? 'bg-emerald-500/10 text-emerald-600 border-emerald-500/20 dark:text-emerald-400'
                 : 'bg-white/25 text-slate-600 border-slate-300/40 dark:bg-white/5 dark:border-white/5 dark:text-slate-300 hover:border-slate-400 dark:hover:border-white/10'
             }`}
             title="When turned on, you will see correct/wrong answers immediately after choosing"
           >
-            <Sparkles className={`w-3.5 h-3.5 ${instantFeedback ? 'animate-pulse text-emerald-500' : 'text-slate-400'}`} />
-            Instant Feedback: {instantFeedback ? 'ON' : 'OFF'}
+            <Sparkles className={`w-3.5 h-3.5 flex-shrink-0 ${instantFeedback ? 'animate-pulse text-emerald-500' : 'text-slate-400'}`} />
+            <span className="truncate">Feedback: {instantFeedback ? 'ON' : 'OFF'}</span>
           </button>
 
           <button
             id="toggle-timer-btn"
             onClick={() => setTimerEnabled(!timerEnabled)}
-            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl border text-xs font-semibold transition-all ${
+            className={`flex items-center justify-center gap-1.5 px-2.5 py-2 sm:py-1.5 rounded-xl border text-[11px] sm:text-xs font-semibold transition-all cursor-pointer ${
               timerEnabled
                 ? 'bg-red-500/10 text-red-600 border-red-500/20 dark:text-red-400'
                 : 'bg-white/25 text-slate-600 border-slate-300/40 dark:bg-white/5 dark:border-white/5 dark:text-slate-300 hover:border-slate-400 dark:hover:border-white/10'
             }`}
           >
-            <Timer className={`w-3.5 h-3.5 ${timerEnabled ? 'animate-pulse' : ''}`} />
-            {formatTime(elapsedSeconds)} {timerEnabled ? 'Pause' : 'Resume'}
+            <Timer className={`w-3.5 h-3.5 flex-shrink-0 ${timerEnabled ? 'animate-pulse' : ''}`} />
+            <span className="truncate">{formatTime(elapsedSeconds)} {timerEnabled ? 'Pause' : 'Play'}</span>
           </button>
         </div>
       </div>
 
       {/* Progress Bar */}
-      <div className="w-full bg-slate-200/50 dark:bg-slate-800/50 h-1.5 rounded-full overflow-hidden mb-8 flex-shrink-0">
+      <div className="w-full bg-slate-200/50 dark:bg-slate-800/50 h-1.5 rounded-full overflow-hidden mb-5 sm:mb-8 flex-shrink-0">
         <div
           className="bg-indigo-600 dark:bg-indigo-400 h-full transition-all duration-300"
           style={{ width: `${((currentIdx + 1) / questions.length) * 100}%` }}
@@ -258,13 +258,13 @@ export default function QuizView({ questions, onQuizSubmit, onSelectReference }:
             </div>
           )}
 
-          <h4 className="text-lg font-bold text-slate-800 dark:text-slate-100 leading-relaxed font-display">
+          <h4 className="text-base sm:text-lg font-bold text-slate-800 dark:text-slate-100 leading-snug sm:leading-relaxed font-display">
             {shuffledQuestions[currentIdx].questionText}
           </h4>
         </div>
 
         {/* Answer Choices */}
-        <div className="space-y-3.5">
+        <div className="space-y-2.5 sm:space-y-3.5">
           {shuffledQuestions[currentIdx].options.map((option, optIdx) => {
             const letters = ['A', 'B', 'C', 'D'];
             const isSelected = selectedAnswers[currentIdx] === optIdx;
@@ -308,19 +308,19 @@ export default function QuizView({ questions, onQuizSubmit, onSelectReference }:
                 id={`option-${currentIdx}-${optIdx}`}
                 disabled={showFeedback}
                 onClick={() => !showFeedback && handleSelectOption(optIdx)}
-                className={`w-full p-4 rounded-2xl border text-left flex items-start gap-4 transition-all duration-200 group ${buttonClass}`}
+                className={`w-full p-3 sm:p-4 rounded-xl sm:rounded-2xl border text-left flex items-start gap-3 sm:gap-4 transition-all duration-200 group cursor-pointer ${buttonClass} min-h-[44px] sm:min-h-[52px]`}
               >
-                <span className={`w-7 h-7 flex-shrink-0 rounded-xl font-bold text-xs flex items-center justify-center transition-all ${bubbleClass}`}>
+                <span className={`w-6 h-6 sm:w-7 sm:h-7 flex-shrink-0 rounded-lg sm:rounded-xl font-bold text-xs flex items-center justify-center transition-all ${bubbleClass}`}>
                   {letters[optIdx]}
                 </span>
-                <span className={`text-sm font-medium leading-relaxed flex-1 ${textClass}`}>
+                <span className={`text-xs sm:text-sm font-medium leading-relaxed flex-1 ${textClass} break-words whitespace-normal`}>
                   {option}
                 </span>
                 {showFeedback && optIdx === correctIndex && (
-                  <CheckCircle className="w-5 h-5 text-emerald-600 dark:text-emerald-400 flex-shrink-0 self-center animate-pulse" />
+                  <CheckCircle className="w-5 h-5 text-emerald-600 dark:text-emerald-400 flex-shrink-0 self-center animate-pulse ml-auto" />
                 )}
                 {showFeedback && isSelected && optIdx !== correctIndex && (
-                  <XCircle className="w-5 h-5 text-red-600 dark:text-red-400 flex-shrink-0 self-center animate-pulse" />
+                  <XCircle className="w-5 h-5 text-red-600 dark:text-red-400 flex-shrink-0 self-center animate-pulse ml-auto" />
                 )}
               </button>
             );
@@ -341,30 +341,30 @@ export default function QuizView({ questions, onQuizSubmit, onSelectReference }:
       </div>
 
       {/* Quick Jump Grid */}
-      <div className="border-t border-slate-200/30 dark:border-white/5 pt-6 mt-6 flex-shrink-0">
-        <div className="flex items-center justify-between mb-3">
-          <p className="text-xs font-bold text-slate-600 dark:text-slate-400 uppercase tracking-wider">
-            Quiz Progress Grid ({totalAnsweredCount} / {questions.length} answered)
+      <div className="border-t border-slate-200/30 dark:border-white/5 pt-4 sm:pt-6 mt-4 sm:mt-6 flex-shrink-0">
+        <div className="flex items-center justify-between gap-2 mb-3">
+          <p className="text-[11px] sm:text-xs font-bold text-slate-600 dark:text-slate-400 uppercase tracking-wider truncate flex-1">
+            Progress ({totalAnsweredCount}/{questions.length} answered)
           </p>
           <button
             id="toggle-progress-grid-btn"
             onClick={() => setShowGrid(!showGrid)}
-            className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-[11px] font-bold text-slate-600 dark:text-slate-300 transition-all cursor-pointer"
+            className="flex items-center gap-1 px-2 py-1 sm:px-2.5 sm:py-1.5 rounded-lg bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-[10px] sm:text-[11px] font-bold text-slate-600 dark:text-slate-300 transition-all cursor-pointer flex-shrink-0"
           >
             {showGrid ? (
               <>
-                <EyeOff className="w-3.5 h-3.5" /> Hide Grid
+                <EyeOff className="w-3 h-3 sm:w-3.5 sm:h-3.5" /> <span className="hidden xs:inline">Hide Grid</span>
               </>
             ) : (
               <>
-                <Eye className="w-3.5 h-3.5" /> Show Grid
+                <Eye className="w-3 h-3 sm:w-3.5 sm:h-3.5" /> <span className="hidden xs:inline">Show Grid</span>
               </>
             )}
           </button>
         </div>
 
         {showGrid && (
-          <div className="flex flex-wrap gap-2 animate-fadeIn">
+          <div className="flex flex-wrap gap-1.5 sm:gap-2 animate-fadeIn max-h-[140px] overflow-y-auto pr-1">
             {shuffledQuestions.map((_, idx) => {
               const isAnswered = selectedAnswers[idx] !== -1;
               const isCurrent = idx === currentIdx;
@@ -379,9 +379,9 @@ export default function QuizView({ questions, onQuizSubmit, onSelectReference }:
                       onSelectReference(q.pageNumber, q.sourceExcerpt);
                     }
                   }}
-                  className={`w-8 h-8 rounded-lg font-bold text-xs flex items-center justify-center border transition-all ${
+                  className={`w-7 h-7 sm:w-8 sm:h-8 rounded-lg font-bold text-xs flex items-center justify-center border transition-all cursor-pointer flex-shrink-0 ${
                     isCurrent
-                      ? 'border-indigo-500/60 bg-indigo-600 text-white scale-110 shadow-md font-extrabold'
+                      ? 'border-indigo-500/60 bg-indigo-600 text-white scale-105 shadow-md font-extrabold'
                       : isAnswered
                       ? 'border-slate-300 dark:border-white/10 bg-slate-200/40 dark:bg-white/10 text-slate-800 dark:text-slate-200'
                       : 'border-slate-300/60 dark:border-white/5 bg-white/25 dark:bg-white/5 hover:border-slate-400 dark:hover:border-white/10 text-slate-600 dark:text-slate-400'
@@ -396,35 +396,35 @@ export default function QuizView({ questions, onQuizSubmit, onSelectReference }:
       </div>
 
       {/* Bottom Actions */}
-      <div className="flex items-center justify-between border-t border-slate-200/30 dark:border-white/5 pt-6 mt-6 flex-shrink-0">
+      <div className="flex items-center justify-between gap-3 border-t border-slate-200/30 dark:border-white/5 pt-4 sm:pt-6 mt-4 sm:mt-6 flex-shrink-0">
         <button
           id="prev-question-btn"
           disabled={currentIdx === 0}
           onClick={handlePrev}
-          className="flex items-center gap-2 px-5 py-2.5 rounded-xl text-sm font-semibold text-slate-700 bg-slate-100 hover:bg-slate-200 dark:text-slate-300 dark:bg-slate-800 dark:hover:bg-slate-700 disabled:opacity-40 disabled:hover:bg-slate-100 dark:disabled:hover:bg-slate-800 transition-all active:scale-[0.98]"
+          className="flex-1 sm:flex-initial flex items-center justify-center gap-1.5 px-3 sm:px-5 py-2.5 sm:py-3 rounded-xl text-xs sm:text-sm font-semibold text-slate-700 bg-slate-100 hover:bg-slate-200 dark:text-slate-300 dark:bg-slate-800 dark:hover:bg-slate-700 disabled:opacity-40 disabled:hover:bg-slate-100 dark:disabled:hover:bg-slate-800 transition-all active:scale-[0.98] cursor-pointer min-h-[44px]"
         >
-          <ChevronLeft className="w-4 h-4" /> Previous
+          <ChevronLeft className="w-4 h-4 flex-shrink-0" /> Previous
         </button>
 
         {currentIdx === questions.length - 1 ? (
           <button
             id="submit-quiz-btn"
             onClick={handleSubmit}
-            className={`px-6 py-3 rounded-xl font-semibold text-white flex items-center gap-2 shadow-lg transition-all duration-200 active:scale-[0.98] ${
+            className={`flex-1 sm:flex-initial flex items-center justify-center gap-1.5 px-3 sm:px-6 py-2.5 sm:py-3 rounded-xl text-xs sm:text-sm font-semibold text-white shadow-lg transition-all duration-200 active:scale-[0.98] cursor-pointer min-h-[44px] ${
               allAnswered
                 ? 'bg-gradient-to-r from-green-600 to-emerald-600 hover:from-green-500 hover:to-emerald-500 shadow-green-100 dark:shadow-none hover:scale-[1.02]'
                 : 'bg-indigo-600 hover:bg-indigo-500 shadow-indigo-100 dark:shadow-none'
             }`}
           >
-            <CheckCircle className="w-4 h-4" /> Submit Quiz {allAnswered ? '' : '(Incomplete)'}
+            <CheckCircle className="w-4 h-4 flex-shrink-0" /> <span className="truncate">Submit Quiz</span>
           </button>
         ) : (
           <button
             id="next-question-btn"
             onClick={handleNext}
-            className="flex items-center gap-2 px-5 py-2.5 rounded-xl text-sm font-semibold text-indigo-700 bg-indigo-100 hover:bg-indigo-200 dark:text-indigo-300 dark:bg-indigo-500/20 dark:hover:bg-indigo-500/30 transition-all active:scale-[0.98]"
+            className="flex-1 sm:flex-initial flex items-center justify-center gap-1.5 px-3 sm:px-5 py-2.5 sm:py-3 rounded-xl text-xs sm:text-sm font-semibold text-indigo-700 bg-indigo-100 hover:bg-indigo-200 dark:text-indigo-300 dark:bg-indigo-500/20 dark:hover:bg-indigo-500/30 transition-all active:scale-[0.98] cursor-pointer min-h-[44px]"
           >
-            Next <ChevronRight className="w-4 h-4" />
+            Next <ChevronRight className="w-4 h-4 flex-shrink-0" />
           </button>
         )}
       </div>

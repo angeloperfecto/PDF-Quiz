@@ -117,63 +117,63 @@ export default function ResultsView({ quiz, attempt, onRetake, onSelectReference
   });
 
   return (
-    <div className="space-y-8" id="results-view-root">
+    <div className="space-y-6 sm:space-y-8" id="results-view-root">
       {/* Score Summary Dashboard */}
-      <div className="glass-card border border-slate-200/50 dark:border-white/10 rounded-3xl p-8 shadow-xl shadow-slate-100/10 dark:shadow-none print:hidden">
-        <div className="flex flex-col md:flex-row items-center gap-8">
-          <div className="relative flex-shrink-0 flex items-center justify-center w-40 h-40 rounded-full bg-white/20 dark:bg-white/5 border-4 border-slate-200/40 dark:border-white/5">
+      <div className="glass-card border border-slate-200/50 dark:border-white/10 rounded-2xl sm:rounded-3xl p-4 sm:p-6 md:p-8 shadow-xl shadow-slate-100/10 dark:shadow-none print:hidden">
+        <div className="flex flex-col sm:flex-row items-center gap-6 sm:gap-8 text-center sm:text-left">
+          <div className="relative flex-shrink-0 flex items-center justify-center w-32 h-32 sm:w-40 sm:h-40 rounded-full bg-white/20 dark:bg-white/5 border-4 border-slate-200/40 dark:border-white/5">
             <div className="text-center">
-              <span className="block text-4xl font-extrabold text-indigo-600 dark:text-indigo-400 font-display">
+              <span className="block text-3xl sm:text-4xl font-extrabold text-indigo-600 dark:text-indigo-400 font-display">
                 {percentage}%
               </span>
-              <span className="text-xs font-semibold text-slate-600 dark:text-slate-400 uppercase tracking-wider mt-1 block font-display">
+              <span className="text-[10px] sm:text-xs font-semibold text-slate-600 dark:text-slate-400 uppercase tracking-wider mt-1 block font-display">
                 Total Score
               </span>
             </div>
-            <div className="absolute -top-1 -right-1 p-2.5 bg-gradient-to-br from-indigo-500 to-purple-600 text-white rounded-2xl shadow-md">
-              <Award className="w-5 h-5" />
+            <div className="absolute -top-1 -right-1 p-2 sm:p-2.5 bg-gradient-to-br from-indigo-500 to-purple-600 text-white rounded-xl sm:rounded-2xl shadow-md">
+              <Award className="w-4 h-4 sm:w-5 sm:h-5" />
             </div>
           </div>
 
-          <div className="flex-1 space-y-4">
+          <div className="flex-1 space-y-4 w-full">
             <div>
-              <h3 className="text-2xl font-bold text-slate-800 dark:text-slate-100 font-display">
+              <h3 className="text-xl sm:text-2xl font-bold text-slate-800 dark:text-slate-100 font-display">
                 {percentage >= 80 ? 'Exceptional Work!' : percentage >= 50 ? 'Keep Practicing!' : 'Needs Revision!'}
               </h3>
-              <p className="text-sm text-slate-600 dark:text-slate-300 mt-1">
+              <p className="text-xs sm:text-sm text-slate-600 dark:text-slate-300 mt-1 leading-relaxed">
                 You took a {quiz.numQuestions} question quiz in {formatTime(attempt.elapsedSeconds)} minutes on {quiz.isManual ? (quiz.title || 'this manual quiz') : quiz.fileName}.
               </p>
             </div>
 
-            <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
-              <div className="bg-emerald-500/10 border border-emerald-500/20 p-3 rounded-2xl animate-fade-in">
-                <span className="block text-xs font-semibold text-emerald-600 dark:text-emerald-400">Correct Answers</span>
-                <span className="text-lg font-bold text-emerald-700 dark:text-emerald-300">{correctCount}</span>
+            <div className="grid grid-cols-2 sm:grid-cols-3 gap-2.5 sm:gap-3">
+              <div className="bg-emerald-500/10 border border-emerald-500/20 p-3 rounded-xl sm:rounded-2xl animate-fade-in">
+                <span className="block text-[10px] sm:text-xs font-semibold text-emerald-600 dark:text-emerald-400">Correct</span>
+                <span className="text-base sm:text-lg font-bold text-emerald-700 dark:text-emerald-300">{correctCount}</span>
               </div>
-              <div className="bg-red-500/10 border border-red-500/20 p-3 rounded-2xl animate-fade-in">
-                <span className="block text-xs font-semibold text-red-600 dark:text-red-400">Incorrect Answers</span>
-                <span className="text-lg font-bold text-red-700 dark:text-red-300">{incorrectCount}</span>
+              <div className="bg-red-500/10 border border-red-500/20 p-3 rounded-xl sm:rounded-2xl animate-fade-in">
+                <span className="block text-[10px] sm:text-xs font-semibold text-red-600 dark:text-red-400">Incorrect</span>
+                <span className="text-base sm:text-lg font-bold text-red-700 dark:text-red-300">{incorrectCount}</span>
               </div>
-              <div className="bg-white/20 dark:bg-white/5 border border-slate-300/55 dark:border-white/5 p-3 rounded-2xl col-span-2 sm:col-span-1">
-                <span className="block text-xs font-semibold text-slate-600 dark:text-slate-300">Completion Time</span>
-                <span className="text-lg font-bold text-slate-800 dark:text-slate-200">{formatTime(attempt.elapsedSeconds)}</span>
+              <div className="bg-white/20 dark:bg-white/5 border border-slate-300/55 dark:border-white/5 p-3 rounded-xl sm:rounded-2xl col-span-2 sm:col-span-1">
+                <span className="block text-[10px] sm:text-xs font-semibold text-slate-600 dark:text-slate-300">Time Taken</span>
+                <span className="text-base sm:text-lg font-bold text-slate-800 dark:text-slate-200">{formatTime(attempt.elapsedSeconds)}</span>
               </div>
             </div>
 
-            <div className="flex flex-wrap items-center gap-3 pt-2">
+            <div className="flex flex-col xs:flex-row flex-wrap items-center justify-center sm:justify-start gap-3 pt-1 w-full">
               <button
                 id="retake-quiz-btn"
                 onClick={onRetake}
-                className="py-2.5 px-4 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white font-semibold text-sm flex items-center gap-1.5 transition-all shadow-[0_4px_12px_rgba(99,102,241,0.2)] active:scale-[0.98]"
+                className="w-full xs:w-auto py-2.5 px-5 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white font-semibold text-xs sm:text-sm flex items-center justify-center gap-1.5 transition-all shadow-[0_4px_12px_rgba(99,102,241,0.2)] active:scale-[0.98] cursor-pointer"
               >
                 <RotateCcw className="w-4 h-4" /> Retake Quiz
               </button>
 
-              <div className="flex items-center gap-1.5">
+              <div className="flex items-center justify-center gap-2">
                 <button
                   id="export-txt-btn"
                   onClick={exportToTXT}
-                  className="p-2.5 rounded-xl border border-slate-300 hover:bg-slate-50 dark:border-slate-800 dark:hover:bg-slate-850 text-slate-600 dark:text-slate-300"
+                  className="p-2.5 rounded-xl border border-slate-300 hover:bg-slate-50 dark:border-slate-850 dark:hover:bg-slate-800/80 text-slate-600 dark:text-slate-300 cursor-pointer"
                   title="Export study worksheet (.txt)"
                 >
                   <FileText className="w-4 h-4" />
@@ -181,7 +181,7 @@ export default function ResultsView({ quiz, attempt, onRetake, onSelectReference
                 <button
                   id="export-json-btn"
                   onClick={exportToJSON}
-                  className="p-2.5 rounded-xl border border-slate-300 hover:bg-slate-50 dark:border-slate-800 dark:hover:bg-slate-850 text-slate-600 dark:text-slate-300"
+                  className="p-2.5 rounded-xl border border-slate-300 hover:bg-slate-50 dark:border-slate-850 dark:hover:bg-slate-800/80 text-slate-600 dark:text-slate-300 cursor-pointer"
                   title="Export schema JSON (.json)"
                 >
                   <FileJson className="w-4 h-4" />
@@ -189,7 +189,7 @@ export default function ResultsView({ quiz, attempt, onRetake, onSelectReference
                 <button
                   id="print-exam-btn"
                   onClick={handlePrint}
-                  className="p-2.5 rounded-xl border border-slate-300 hover:bg-slate-50 dark:border-slate-800 dark:hover:bg-slate-850 text-slate-600 dark:text-slate-300"
+                  className="p-2.5 rounded-xl border border-slate-300 hover:bg-slate-50 dark:border-slate-850 dark:hover:bg-slate-800/80 text-slate-600 dark:text-slate-300 cursor-pointer"
                   title="Print paper"
                 >
                   <Printer className="w-4 h-4" />
@@ -202,17 +202,17 @@ export default function ResultsView({ quiz, attempt, onRetake, onSelectReference
 
       {/* Detailed Question Review Sheet */}
       <div className="space-y-6" id="review-panel">
-        <div className="flex items-center justify-between border-b border-slate-200/30 dark:border-white/5 pb-4 print:hidden">
-          <h4 className="font-bold text-slate-800 dark:text-slate-200 text-lg font-display">
+        <div className="flex flex-col xs:flex-row xs:items-center justify-between border-b border-slate-200/30 dark:border-white/5 pb-4 gap-3 print:hidden">
+          <h4 className="font-bold text-slate-800 dark:text-slate-200 text-base sm:text-lg font-display">
             Review Questions
           </h4>
-          <div className="flex bg-white/20 dark:bg-white/5 border border-slate-200/40 dark:border-white/5 p-1 rounded-xl">
+          <div className="flex bg-white/20 dark:bg-white/5 border border-slate-200/40 dark:border-white/5 p-1 rounded-xl self-start xs:self-auto">
             {(['all', 'correct', 'incorrect'] as const).map((tab) => (
               <button
                 key={tab}
                 id={`tab-filter-${tab}`}
                 onClick={() => setActiveQuestionTab(tab)}
-                className={`px-3 py-1.5 rounded-lg text-xs font-bold capitalize transition-all ${
+                className={`px-3 py-1.5 rounded-lg text-xs font-bold capitalize transition-all cursor-pointer ${
                   activeQuestionTab === tab
                     ? 'bg-white/85 dark:bg-indigo-600 text-slate-900 dark:text-slate-50 shadow-sm'
                     : 'text-slate-600 hover:text-slate-900 dark:text-slate-450 dark:hover:text-slate-200'

@@ -552,6 +552,15 @@ export default function App() {
         </div>
       </aside>
 
+      {/* Sidebar Backdrop Overlay for Mobile */}
+      {isSidebarOpen && (
+        <div
+          id="sidebar-overlay"
+          onClick={() => setIsSidebarOpen(false)}
+          className="fixed inset-0 z-40 bg-slate-900/45 backdrop-blur-[2px] lg:hidden transition-all duration-300"
+        />
+      )}
+
       {/* Main Content Area */}
       <div className="flex-1 flex flex-col overflow-hidden relative z-10">
         {/* Top Header */}
