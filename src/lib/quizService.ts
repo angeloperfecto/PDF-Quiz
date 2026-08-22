@@ -1,6 +1,53 @@
 import { collection, doc, setDoc, updateDoc, getDocs, query, where, orderBy, arrayUnion, deleteDoc, onSnapshot } from 'firebase/firestore';
-import { db } from './firebase';
+import { db, auth } from './firebase';
 import { Quiz, QuizAttempt } from '../types';
+
+enum OperationType {
+  CREATE = 'create',
+  UPDATE = 'update',
+  DELETE = 'delete',
+  LIST = 'list',
+  GET = 'get',
+  WRITE = 'write',
+}
+
+interface FirestoreErrorInfo {
+  error: string;
+  operationType: OperationType;
+  path: string | null;
+  authInfo: {
+    userId?: string | null;
+    email?: string | null;
+    emailVerified?: boolean | null;
+    isAnonymous?: boolean | null;
+    tenantId?: string | null;
+    providerInfo?: {
+      providerId?: string | null;
+      email?: string | null;
+    }[];
+  }
+}
+
+function handleFirestoreError(error: unknown, operationType: OperationType, path: string | null) {
+  const errInfo: FirestoreErrorInfo = {
+    error: error instanceof Error ? error.message : String(error),
+    authInfo: {
+      userId: auth.currentUser?.uid,
+      email: auth.currentUser?.email,
+      emailVerified: auth.currentUser?.emailVerified,
+      isAnonymous: auth.currentUser?.isAnonymous,
+      tenantId: auth.currentUser?.tenantId,
+      providerInfo: auth.currentUser?.providerData?.map(provider => ({
+        providerId: provider.providerId,
+        email: provider.email,
+      })) || []
+    },
+    operationType,
+    path
+  };
+  console.error('Firestore Error: ', JSON.stringify(errInfo));
+  throw new Error(JSON.stringify(errInfo));
+}
 
 const QUIZ_COLLECTION = 'quizzes';
 
@@ -23,8 +70,7 @@ export const saveQuizToFirestore = async (quiz: Quiz): Promise<void> => {
     const cleanedQuiz = JSON.parse(JSON.stringify(quiz));
     await setDoc(docRef, cleanedQuiz);
   } catch (error) {
-    console.error('Error saving quiz to Firestore:', error);
-    throw error;
+    handleFirestoreError(error, OperationType.WRITE, `${QUIZ_COLLECTION}/${quiz.id}`);
   }
 };
 
@@ -49,8 +95,7 @@ export const addQuizAttemptToFirestore = async (quizId: string, attempt: QuizAtt
       scoreHistory: arrayUnion(attempt),
     });
   } catch (error) {
-    console.error('Error saving attempt to Firestore:', error);
-    throw error;
+    handleFirestoreError(error, OperationType.UPDATE, `${QUIZ_COLLECTION}/${quizId}`);
   }
 };
 
@@ -78,8 +123,7 @@ export const getUserQuizzesFromFirestore = async (userId: string): Promise<Quiz[
     });
     return quizzes;
   } catch (error) {
-    console.error('Error loading user quizzes from Firestore:', error);
-    throw error;
+    handleFirestoreError(error, OperationType.GET, QUIZ_COLLECTION);
   }
 };
 
@@ -117,8 +161,7 @@ export const deleteQuizFromFirestore = async (quizId: string, userId?: string): 
     const docRef = doc(db, QUIZ_COLLECTION, quizId);
     await deleteDoc(docRef);
   } catch (error) {
-    console.error('Error deleting quiz from Firestore:', error);
-    throw error;
+    handleFirestoreError(error, OperationType.DELETE, `${QUIZ_COLLECTION}/${quizId}`);
   }
 };
 
@@ -143,7 +186,7 @@ export const subscribeToUserQuizzesFromFirestore = (userId: string, callback: (q
     });
     callback(quizzes);
   }, (error) => {
-    console.error('Error listening to user quizzes from Firestore:', error);
+    handleFirestoreError(error, OperationType.GET, QUIZ_COLLECTION);
   });
 
   return unsubscribe;

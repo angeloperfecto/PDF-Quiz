@@ -1,13 +1,21 @@
 rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
-    match /quizzes/{quizId} {
-      allow read, write: if request.auth != null && request.auth.uid == resource.data.userId;
-      allow create: if request.auth != null && request.auth.uid == request.resource.data.userId;
+    // Catch-all default deny rule
+    match /{document=**} {
+      allow read, write: if false;
     }
-    match /study_events/{eventId} {
-      allow read, write: if request.auth != null && (resource == null || resource.data.userId == request.auth.uid);
+
+    match /quizzes/{quizId} {
+      allow read, delete: if request.auth != null && resource.data.userId == request.auth.uid;
       allow create: if request.auth != null && request.resource.data.userId == request.auth.uid;
+      allow update: if request.auth != null && resource.data.userId == request.auth.uid && request.resource.data.userId == resource.data.userId;
+    }
+
+    match /study_events/{eventId} {
+      allow read, delete: if request.auth != null && resource.data.userId == request.auth.uid;
+      allow create: if request.auth != null && request.resource.data.userId == request.auth.uid;
+      allow update: if request.auth != null && resource.data.userId == request.auth.uid && request.resource.data.userId == resource.data.userId;
     }
   }
 }
