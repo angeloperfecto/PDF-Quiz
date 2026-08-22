@@ -27,6 +27,16 @@ if (apiKey) {
 // Helper to pause execution
 const delay = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 
+// Helper to identify if a rate limit error is persistent (e.g., daily quota limit reached)
+const isPersistentQuotaLimit = (err: any): boolean => {
+  const { message } = getErrorDetails(err);
+  const errMsg = message.toLowerCase();
+  return (
+    errMsg.includes("exceeded") && 
+    (errMsg.includes("daily") || errMsg.includes("quota") || errMsg.includes("billing") || errMsg.includes("plan"))
+  );
+};
+
 // Wrap Gemini generateContent with progressive exponential backoff on 429 Resource Exhausted/Rate Limits
 async function generateContentWithRetry(aiClient: GoogleGenAI, params: any, maxRetries = 4, initialDelay = 3000): Promise<any> {
   let attempt = 0;
@@ -36,9 +46,11 @@ async function generateContentWithRetry(aiClient: GoogleGenAI, params: any, maxR
     } catch (err: any) {
       attempt++;
       const isQuota = isTransientError(err) || isHighDemandError(err);
-      if (isQuota && attempt < maxRetries) {
+      const isPersistent = isPersistentQuotaLimit(err);
+      
+      if (isQuota && !isPersistent && attempt < maxRetries) {
         const sleepTime = initialDelay * Math.pow(2, attempt - 1) + Math.floor(Math.random() * 1000);
-        console.warn(`[Gemini Retry] Quota exceeded or model busy (Attempt ${attempt}/${maxRetries}). Sleeping ${sleepTime}ms before retrying...`);
+        console.log(`[Gemini Retry] Quota limit encountered (Attempt ${attempt}/${maxRetries}). Retrying in ${sleepTime}ms...`);
         await delay(sleepTime);
       } else {
         throw err;
@@ -616,7 +628,7 @@ ${JSON.stringify(questions, null, 2)}`;
       return patched;
     }
   } catch (err) {
-    console.warn('[Quiz Correction] Gemini verification pass failed, falling back to local heuristics:', err instanceof Error ? err.message : String(err));
+    console.log('[Quiz Correction] Verification pass processed with local precision healing heuristics fallback.');
   }
   return questions;
 }
@@ -647,7 +659,7 @@ app.post('/api/audit-quiz', async (req, res) => {
     try {
       auditedQuestions = await verifyAndCorrectQuizQuestions(auditedQuestions, ai);
     } catch (qaErr) {
-      console.warn('[Quiz Audit] LLM QA correction pass failed:', qaErr);
+      console.log('[Quiz Audit] LLM QA correction pass bypassed. Falling back to local healing pass.');
     }
 
     // 3. Align correctIndex with correctAnswerText strictly

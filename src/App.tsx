@@ -580,45 +580,6 @@ export default function App() {
           <div className="flex items-center gap-4 text-xs font-bold text-slate-600 dark:text-slate-300">
             {currentQuiz && activeTab === 'active-study' && (
               <>
-                {/* Desktop Layout Mode Selectors */}
-                {!currentQuiz.isManual && (
-                  <div className="hidden lg:flex items-center gap-0.5 bg-slate-200/50 dark:bg-white/5 p-1 rounded-xl border border-slate-250 dark:border-white/5">
-                    <button
-                      id="layout-split-btn"
-                      onClick={() => setLayoutMode('split')}
-                      className={`px-2.5 py-1.5 rounded-lg text-[11px] font-bold transition-all ${
-                        layoutMode === 'split'
-                          ? 'bg-indigo-600 text-white shadow-sm'
-                          : 'hover:text-slate-900 dark:hover:text-slate-100 text-slate-500 dark:text-slate-400 hover:bg-slate-200/40 dark:hover:bg-white/5'
-                      }`}
-                    >
-                      Split View
-                    </button>
-                    <button
-                      id="layout-quiz-btn"
-                      onClick={() => setLayoutMode('quiz-only')}
-                      className={`px-2.5 py-1.5 rounded-lg text-[11px] font-bold transition-all ${
-                        layoutMode === 'quiz-only'
-                          ? 'bg-indigo-600 text-white shadow-sm'
-                          : 'hover:text-slate-900 dark:hover:text-slate-100 text-slate-500 dark:text-slate-400 hover:bg-slate-200/40 dark:hover:bg-white/5'
-                      }`}
-                    >
-                      Quiz Only
-                    </button>
-                    <button
-                      id="layout-pdf-btn"
-                      onClick={() => setLayoutMode('pdf-only')}
-                      className={`px-2.5 py-1.5 rounded-lg text-[11px] font-bold transition-all ${
-                        layoutMode === 'pdf-only'
-                          ? 'bg-indigo-600 text-white shadow-sm'
-                          : 'hover:text-slate-900 dark:hover:text-slate-100 text-slate-500 dark:text-slate-400 hover:bg-slate-200/40 dark:hover:bg-white/5'
-                      }`}
-                    >
-                      PDF Only
-                    </button>
-                  </div>
-                )}
-
                 <span className="hidden sm:inline-flex items-center gap-1.5 bg-white/20 dark:bg-white/5 border border-slate-200/50 dark:border-white/5 px-3 py-1.5 rounded-full truncate max-w-xs">
                   {currentQuiz.isManual ? (
                     <>
@@ -787,186 +748,33 @@ export default function App() {
             </div>
           )}
 
-          {/* Tab 2: Active Study (Side-by-Side Split View!) */}
+          {/* Tab 2: Active Study (Clean focused Quiz View) */}
           {activeTab === 'active-study' && currentQuiz && (
-            <div className="h-full flex flex-col lg:flex-row">
-              {/* Left Panel: Quiz taking or scoring Results */}
-              <div className={`h-full flex-col p-6 overflow-hidden border-r border-slate-200 dark:border-slate-800 ${
-                mobileSplit === 'study' ? 'flex' : 'hidden'
-              } ${
-                layoutMode === 'pdf-only' ? 'lg:hidden' : 'lg:flex'
-              } ${
-                layoutMode === 'quiz-only' ? 'w-full lg:w-full' : 'w-full lg:w-3/5'
-              }`}>
-                {/* Panel Header with Maximize / Minimize controls */}
-                <div className="hidden lg:flex items-center justify-between pb-3 mb-2 border-b border-slate-200/30 dark:border-white/5 flex-shrink-0">
-                  <div className="flex items-center gap-2">
-                    <span className="text-xs font-bold text-indigo-600 dark:text-indigo-400 uppercase tracking-wider font-display">
-                      Quiz Panel
-                    </span>
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <button
-                      id="toggle-quiz-maximize"
-                      onClick={() => setLayoutMode(layoutMode === 'quiz-only' ? 'split' : 'quiz-only')}
-                      className="p-1.5 hover:bg-slate-200 dark:hover:bg-white/5 rounded-xl text-slate-500 hover:text-indigo-600 dark:text-slate-400 dark:hover:text-indigo-400 transition-all flex items-center gap-1.5 text-xs font-semibold"
-                      title={layoutMode === 'quiz-only' ? "Minimize/Split Panel" : "Maximize Panel"}
-                    >
-                      {layoutMode === 'quiz-only' ? (
-                        <>
-                          <Minimize2 className="w-4 h-4" />
-                          <span>Split View</span>
-                        </>
-                      ) : (
-                        <>
-                          <Maximize2 className="w-4 h-4" />
-                          <span>Maximize Quiz</span>
-                        </>
-                      )}
-                    </button>
-                    <button
-                      id="toggle-quiz-hide"
-                      onClick={() => setLayoutMode('pdf-only')}
-                      className="p-1.5 hover:bg-slate-200 dark:hover:bg-white/5 rounded-xl text-slate-500 hover:text-red-600 dark:text-slate-400 dark:hover:text-red-400 transition-all flex items-center gap-1.5 text-xs font-semibold"
-                      title="Hide Quiz Panel"
-                    >
-                      <X className="w-4 h-4" />
-                      <span>Hide</span>
-                    </button>
-                  </div>
-                </div>
-
-                <div className="flex-1 overflow-y-auto min-h-0 pr-1">
-                  {currentAttempt ? (
-                    <ResultsView
-                      quiz={currentQuiz}
-                      attempt={currentAttempt}
-                      onRetake={() => {
-                        setCurrentAttempt(null);
-                        setMobileSplit('study');
-                      }}
-                      onSelectReference={(page, text) => {
-                        handleSelectReference(page, text);
-                        setMobileSplit('pdf'); // Auto transition to PDF tab on mobile to show reference
-                      }}
-                    />
-                  ) : (
-                    <QuizView
-                      questions={currentQuiz.questions}
-                      onQuizSubmit={(userAnswers, elapsedSeconds, questionMap, optionMaps) => {
-                        handleQuizSubmit(userAnswers, elapsedSeconds, questionMap, optionMaps);
-                      }}
-                      onSelectReference={(page, text) => {
-                        handleSelectReference(page, text);
-                      }}
-                    />
-                  )}
-                </div>
-              </div>
-
-               {/* Right Panel: Interactive PDF Viewer */}
-              <div className={`h-full flex-col p-6 overflow-hidden bg-white/20 dark:bg-slate-900/40 ${
-                mobileSplit === 'pdf' ? 'flex' : 'hidden'
-              } ${
-                layoutMode === 'quiz-only' ? 'lg:hidden' : 'lg:flex'
-              } ${
-                layoutMode === 'pdf-only' ? 'w-full lg:w-full' : 'w-full lg:w-2/5'
-              }`}>
-                {/* Panel Header with Maximize / Minimize controls */}
-                <div className="hidden lg:flex items-center justify-between pb-3 mb-2 border-b border-slate-200/30 dark:border-white/5 flex-shrink-0">
-                  <div className="flex items-center gap-2">
-                    <span className="text-xs font-bold text-indigo-650 dark:text-indigo-400 uppercase tracking-wider font-display">
-                      PDF Reference Panel
-                    </span>
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <button
-                      id="toggle-pdf-maximize"
-                      onClick={() => setLayoutMode(layoutMode === 'pdf-only' ? 'split' : 'pdf-only')}
-                      className="p-1.5 hover:bg-slate-200 dark:hover:bg-white/5 rounded-xl text-slate-500 hover:text-indigo-600 dark:text-slate-400 dark:hover:text-indigo-400 transition-all flex items-center gap-1.5 text-xs font-semibold"
-                      title={layoutMode === 'pdf-only' ? "Minimize/Split Panel" : "Maximize Panel"}
-                    >
-                      {layoutMode === 'pdf-only' ? (
-                        <>
-                          <Minimize2 className="w-4 h-4" />
-                          <span>Split View</span>
-                        </>
-                      ) : (
-                        <>
-                          <Maximize2 className="w-4 h-4" />
-                          <span>Maximize PDF</span>
-                        </>
-                      )}
-                    </button>
-                    <button
-                      id="toggle-pdf-hide"
-                      onClick={() => setLayoutMode('quiz-only')}
-                      className="p-1.5 hover:bg-slate-200 dark:hover:bg-white/5 rounded-xl text-slate-500 hover:text-red-600 dark:text-slate-400 dark:hover:text-red-400 transition-all flex items-center gap-1.5 text-xs font-semibold"
-                      title="Hide PDF Panel"
-                    >
-                      <X className="w-4 h-4" />
-                      <span>Hide</span>
-                    </button>
-                  </div>
-                </div>
-
-                {activeFile ? (
-                  <PDFViewer
-                    pdfFile={activeFile}
-                    initialPage={activePDFPage}
-                    highlightText={activeHighlightText}
+            <div className="h-full overflow-y-auto px-6 py-8">
+              <div className="max-w-4xl mx-auto">
+                {currentAttempt ? (
+                  <ResultsView
+                    quiz={currentQuiz}
+                    attempt={currentAttempt}
+                    onRetake={() => {
+                      setCurrentAttempt(null);
+                    }}
+                    onSelectReference={(page, text) => {
+                      handleSelectReference(page, text);
+                    }}
                   />
                 ) : (
-                  <div className="flex-1 glass-card border border-slate-200/50 dark:border-white/5 rounded-3xl p-8 flex flex-col items-center justify-center text-center shadow-sm">
-                    <div className="p-4 bg-indigo-500/10 dark:bg-indigo-500/20 rounded-full text-indigo-600 dark:text-indigo-450 mb-5">
-                      <Upload className="w-8 h-8" />
-                    </div>
-                    <h4 className="font-bold text-slate-800 dark:text-slate-100 font-display mb-1">
-                      PDF Layout Reference is Closed
-                    </h4>
-                    <p className="text-xs text-slate-500 dark:text-slate-400 max-w-xs mb-6">
-                      Since this session was reloaded from your history, you need to drag or open the original PDF file to view pages side-by-side.
-                    </p>
-                    <label className="py-2.5 px-4 rounded-xl bg-gradient-to-r from-indigo-600 to-indigo-700 hover:from-indigo-500 hover:to-indigo-600 text-white font-semibold text-xs cursor-pointer shadow-md transition-colors">
-                      Open Original PDF
-                      <input
-                        type="file"
-                        accept=".pdf"
-                        onChange={handleAssociateFile}
-                        className="hidden"
-                      />
-                    </label>
-                  </div>
+                  <QuizView
+                    questions={currentQuiz.questions}
+                    onQuizSubmit={(userAnswers, elapsedSeconds, questionMap, optionMaps) => {
+                      handleQuizSubmit(userAnswers, elapsedSeconds, questionMap, optionMaps);
+                    }}
+                    onSelectReference={(page, text) => {
+                      handleSelectReference(page, text);
+                    }}
+                  />
                 )}
               </div>
-
-              {/* Mobile Navigation Split-Bar */}
-              {!currentQuiz.isManual && (
-                <div className="lg:hidden flex border-t border-slate-200/50 dark:border-white/5 bg-white/40 dark:bg-[#0b0f19]/40 backdrop-blur-md p-2.5 flex-shrink-0">
-                  <button
-                    onClick={() => setMobileSplit('study')}
-                    className={`flex-1 py-2.5 rounded-xl font-bold text-xs flex items-center justify-center gap-2 transition-all ${
-                      mobileSplit === 'study'
-                        ? 'bg-indigo-600 text-white'
-                        : 'text-slate-500'
-                    }`}
-                  >
-                    <HelpCircle className="w-4 h-4" />
-                    Quiz / Review
-                  </button>
-                  <button
-                    onClick={() => setMobileSplit('pdf')}
-                    className={`flex-1 py-2.5 rounded-xl font-bold text-xs flex items-center justify-center gap-2 transition-all ${
-                      mobileSplit === 'pdf'
-                        ? 'bg-indigo-600 text-white'
-                        : 'text-slate-500'
-                    }`}
-                  >
-                    <FileText className="w-4 h-4" />
-                    View PDF Reference
-                  </button>
-                </div>
-              )}
             </div>
           )}
 
