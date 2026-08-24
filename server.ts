@@ -28,14 +28,14 @@ if (apiKey) {
 const delay = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 
 // Helper to identify if a rate limit error is persistent (e.g., daily quota limit reached)
-const isPersistentQuotaLimit = (err: any): boolean => {
+function isPersistentQuotaLimit(err: any): boolean {
   const { message } = getErrorDetails(err);
   const errMsg = message.toLowerCase();
   return (
     errMsg.includes("exceeded") && 
     (errMsg.includes("daily") || errMsg.includes("quota") || errMsg.includes("billing") || errMsg.includes("plan"))
   );
-};
+}
 
 // Wrap Gemini generateContent with progressive exponential backoff on 429 Resource Exhausted/Rate Limits
 async function generateContentWithRetry(aiClient: GoogleGenAI, params: any, maxRetries = 4, initialDelay = 3000): Promise<any> {
@@ -162,7 +162,7 @@ function robustParseQuestionsArray(rawStr: string): any[] {
 }
 
 // Extract clean error message, code, and status from any Gemini API error
-const getErrorDetails = (err: any) => {
+function getErrorDetails(err: any) {
   let message = String(err?.message || err || "");
   let code = Number(err?.code) || 0;
   let status = String(err?.status || "");
@@ -186,10 +186,10 @@ const getErrorDetails = (err: any) => {
   }
 
   return { message, code, status };
-};
+}
 
 // Helper to identify transient errors that should be retried or cause a fallback
-const isTransientError = (err: any): boolean => {
+function isTransientError(err: any): boolean {
   const { message, code, status } = getErrorDetails(err);
   const errMsg = message.toLowerCase();
   return (
@@ -208,10 +208,10 @@ const isTransientError = (err: any): boolean => {
     errMsg.includes("timeout") ||
     errMsg.includes("econnrefused")
   );
-};
+}
 
 // Helper to identify 503 / UNAVAILABLE / high demand errors that should bypass retries on the same model and fall back to other models immediately
-const isHighDemandError = (err: any): boolean => {
+function isHighDemandError(err: any): boolean {
   const { message, code, status } = getErrorDetails(err);
   const errMsg = message.toLowerCase();
   return (
@@ -228,7 +228,7 @@ const isHighDemandError = (err: any): boolean => {
     errMsg.includes("exhausted") ||
     errMsg.includes("unavailable")
   );
-};
+}
 
 // Robust recovery JSON parser to handle slightly malformed or truncated responses when too many questions are returned
 function parseQuizQuestions(rawJsonStr: string): { questions: any[], totalQuestionsInPDF?: number, validationMessage?: string } {
